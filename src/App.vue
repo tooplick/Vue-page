@@ -58,16 +58,10 @@ watch(() => route.path, async () => {
 .nav-bar {
   position: fixed;
   top: 1.5rem;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 2rem;
   z-index: 100;
   display: flex;
   gap: 2rem;
-  padding: 0.6em 1.5em;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9999px;
 }
 
 .nav-link {

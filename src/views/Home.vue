@@ -70,7 +70,7 @@ import BlurText from '../components/BlurText.vue'
           class-name="cta-heading"
         />
         <p class="cta-desc">Check out the projects I've been working on</p>
-        <router-link to="/projects" class="cta-btn">View Projects</router-link>
+        <router-link to="/projects" class="cta-btn">View Projects &rarr;</router-link>
       </div>
     </section>
   </div>
@@ -158,12 +158,11 @@ import BlurText from '../components/BlurText.vue'
 .cta-desc { opacity: 0.5; margin-bottom: 2rem; }
 .cta-btn {
   display: inline-block;
-  padding: 0.8em 2em;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
   color: white;
-  text-decoration: none;
-  transition: all 0.3s;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 1.1rem;
+  transition: opacity 0.3s;
 }
-.cta-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: white; }
+.cta-btn:hover { opacity: 0.7; }
 </style>

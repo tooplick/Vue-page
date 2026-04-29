@@ -1,8 +1,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import ScrambleText from '../components/ScrambleText.vue'
-import ScrollReveal from '../components/ScrollReveal.vue'
+import SplitText from '../components/SplitText.vue'
+import BlurText from '../components/BlurText.vue'
 import CountUp from '../components/CountUp.vue'
 import { projects } from '../data/projects'
 
@@ -24,7 +24,7 @@ async function fetchStars(link) {
     const data = await res.json()
     stars.value = data.stargazers_count
   } catch {
-    // fallback to static value
+    // fallback
   }
 }
 
@@ -39,74 +39,71 @@ watch(project, (p) => {
 <template>
   <div class="project-detail" v-if="project">
     <div class="detail-header">
-      <ScrambleText
-        :radius="120"
-        :duration="1.5"
-        :speed="0.6"
-        scramble-chars=".:~!@#$%"
+      <SplitText
+        :text="project.title"
+        tag="h1"
+        :delay="80"
+        :duration="1"
+        ease="power3.out"
+        text-align="center"
         class-name="detail-title"
-      >
-        {{ project.title }}
-      </ScrambleText>
+      />
 
       <div class="detail-tags">
         <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
       </div>
+
+      <div class="stars-row">
+        <CountUp
+          :to="stars"
+          :duration="2"
+          :delay="0.3"
+          separator=","
+          class-name="stars-count"
+        />
+        <span class="stars-suffix">&#9733;</span>
+      </div>
     </div>
 
-    <div class="detail-content">
-      <div class="detail-info">
-        <div class="stars-section">
-          <div class="stars-label">GitHub Stars</div>
-          <div class="stars-number">
-            <CountUp
-              :to="stars"
-              :duration="2"
-              :delay="0.3"
-              separator=","
-              class-name="stars-count"
-            />
-            <span class="stars-suffix">&#9733;</span>
-          </div>
-        </div>
+    <div class="detail-body">
+      <BlurText
+        :text="project.description"
+        :delay="100"
+        animate-by="words"
+        direction="top"
+        class-name="detail-desc"
+      />
+    </div>
 
-        <ScrollReveal
-          :children="project.description"
-          :enable-blur="true"
-          :base-opacity="0.1"
-          :base-rotation="2"
-          :blur-strength="3"
-          container-class-name="detail-desc"
-          text-class-name="detail-desc-text"
-        />
-
-        <div class="detail-actions">
-          <a :href="project.link" target="_blank" rel="noopener" class="btn-github">
-            View on GitHub
-          </a>
-          <router-link to="/projects" class="btn-back">&#8592; All Projects</router-link>
-        </div>
-      </div>
+    <div class="detail-actions">
+      <router-link to="/projects" class="btn-link btn-back">
+        &larr; All Projects
+      </router-link>
+      <a :href="project.link" target="_blank" rel="noopener" class="btn-link">
+        GitHub &rarr;
+      </a>
     </div>
   </div>
 
   <div v-else class="not-found">
     <h2>Project not found</h2>
-    <router-link to="/projects" class="btn-back">&#8592; Back to Projects</router-link>
+    <router-link to="/projects" class="btn-link">&larr; Back to Projects</router-link>
   </div>
 </template>
 
 <style scoped>
 .project-detail {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 4rem 2rem;
-  max-width: 1000px;
-  margin: 0 auto;
+  text-align: center;
 }
 
 .detail-header {
-  text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 }
 
 .detail-title {
@@ -118,38 +115,16 @@ watch(project, (p) => {
   gap: 0.5rem;
   justify-content: center;
   flex-wrap: wrap;
+  margin-bottom: 1.5rem;
 }
 
 .tag {
-  padding: 0.3em 0.8em;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 9999px;
   font-size: 0.8rem;
-  opacity: 0.6;
+  opacity: 0.4;
+  letter-spacing: 0.05em;
 }
 
-.detail-content {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.stars-section {
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.stars-label {
-  font-size: 0.85rem;
-  opacity: 0.5;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-bottom: 0.5rem;
-}
-
-.stars-number {
+.stars-row {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,59 +132,52 @@ watch(project, (p) => {
 }
 
 .stars-count {
-  font-size: 3rem;
-  font-weight: 900;
-  font-family: monospace;
+  font-size: 2.5rem;
+  font-weight: 200;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
 }
 
 .stars-suffix {
-  font-size: 2rem;
+  font-size: 1.5rem;
   color: #fbbf24;
 }
 
-.detail-desc {
-  margin-bottom: 2rem;
+.detail-body {
+  max-width: 600px;
+  margin-bottom: 2.5rem;
 }
 
-.detail-desc-text {
+.detail-desc {
   font-size: 1rem !important;
-  font-weight: 400 !important;
-  opacity: 0.7;
+  opacity: 0.6;
   line-height: 1.8;
 }
 
 .detail-actions {
   display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 2rem;
 }
 
-.btn-github {
-  padding: 0.7em 1.5em;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+.btn-link {
   color: white;
-  text-decoration: none;
-  font-size: 0.9rem;
-  transition: all 0.3s;
-}
-
-.btn-github:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.btn-back {
-  padding: 0.7em 1.5em;
-  color: white;
-  text-decoration: none;
-  opacity: 0.5;
-  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 0.95rem;
   transition: opacity 0.3s;
 }
 
+.btn-link:hover {
+  opacity: 0.6;
+}
+
+.btn-back {
+  opacity: 0.5;
+}
+
 .btn-back:hover {
-  opacity: 1;
+  opacity: 0.8;
 }
 
 .not-found {
