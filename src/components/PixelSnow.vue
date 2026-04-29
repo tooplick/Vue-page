@@ -261,9 +261,11 @@ watch(
 
 <style scoped>
 .pixel-snow-container {
-  position: absolute;
+  position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 </style>

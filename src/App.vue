@@ -1,6 +1,16 @@
 <script setup>
+import { watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import PixelSnow from './components/PixelSnow.vue'
 import ClickSpark from './components/ClickSpark.vue'
+
+const route = useRoute()
+
+watch(() => route.path, async () => {
+  await nextTick()
+  setTimeout(() => { ScrollTrigger.refresh() }, 150)
+})
 </script>
 
 <template>
@@ -25,6 +35,12 @@ import ClickSpark from './components/ClickSpark.vue'
         variant="snowflake"
       />
 
+      <nav class="nav-bar">
+        <router-link to="/" class="nav-link">Home</router-link>
+        <router-link to="/projects" class="nav-link">Projects</router-link>
+        <router-link to="/about" class="nav-link">About</router-link>
+      </nav>
+
       <div class="content">
         <router-view />
       </div>
@@ -37,6 +53,34 @@ import ClickSpark from './components/ClickSpark.vue'
   position: relative;
   width: 100%;
   min-height: 100vh;
+}
+
+.nav-bar {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  gap: 2rem;
+  padding: 0.6em 1.5em;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  transition: color 0.3s;
+}
+
+.nav-link:hover,
+.nav-link.router-link-active {
+  color: #ffffff;
 }
 
 .content {

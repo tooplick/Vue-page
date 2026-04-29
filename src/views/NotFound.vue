@@ -5,7 +5,7 @@ import GlitchText from '../components/GlitchText.vue'
 <template>
   <div class="not-found">
     <GlitchText text="404" :speed="0.5" :enable-shadows="true" />
-    <GlitchText text="Page Not Found" :speed="0.5" :enable-shadows="true"/>
+    <GlitchText text="Page Not Found" :speed="0.5" :enable-shadows="true" />
     <router-link to="/" class="back-link">Back to Home</router-link>
   </div>
 </template>
@@ -19,6 +19,14 @@ import GlitchText from '../components/GlitchText.vue'
   min-height: 100vh;
   text-align: center;
   padding: 2rem;
+}
+
+.message {
+  font-size: 1.5rem;
+  opacity: 0.6;
+  letter-spacing: 0.15em;
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .back-link {

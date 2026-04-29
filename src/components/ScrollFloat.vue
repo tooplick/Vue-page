@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, watch, useTemplateRef } from 'vue'
+import { computed, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -11,74 +11,58 @@ const props = defineProps({
   textClassName: { type: String, default: '' },
   animationDuration: { type: Number, default: 1 },
   ease: { type: String, default: 'back.inOut(2)' },
-  scrollStart: { type: String, default: 'center bottom+=50%' },
-  scrollEnd: { type: String, default: 'bottom bottom-=40%' },
   stagger: { type: Number, default: 0.03 }
 })
 
 const containerRef = useTemplateRef('containerRef')
-let scrollTriggerInstance = null
+let ctx = null
 
 const splitText = computed(() => {
   const text = typeof props.children === 'string' ? props.children : ''
   return text.split('')
 })
 
-const initializeAnimation = () => {
+onMounted(async () => {
+  await nextTick()
   const el = containerRef.value
   if (!el) return
 
-  const charElements = el.querySelectorAll('.char')
+  ctx = gsap.context(() => {
+    const charElements = el.querySelectorAll('.char')
+    if (!charElements.length) return
 
-  if (scrollTriggerInstance) {
-    scrollTriggerInstance.kill()
-  }
-
-  const tl = gsap.fromTo(
-    charElements,
-    {
-      willChange: 'opacity, transform',
+    gsap.set(charElements, {
       opacity: 0,
       yPercent: 120,
       scaleY: 2.3,
       scaleX: 0.7,
       transformOrigin: '50% 0%'
-    },
-    {
-      duration: props.animationDuration,
-      ease: props.ease,
-      opacity: 1,
-      yPercent: 0,
-      scaleY: 1,
-      scaleX: 1,
-      stagger: props.stagger,
-      scrollTrigger: {
-        trigger: el,
-        start: props.scrollStart,
-        end: props.scrollEnd,
-        scrub: true
+    })
+
+    ScrollTrigger.create({
+      trigger: el,
+      start: 'top 80%',
+      once: true,
+      onEnter: () => {
+        gsap.to(charElements, {
+          duration: props.animationDuration,
+          ease: props.ease,
+          opacity: 1,
+          yPercent: 0,
+          scaleY: 1,
+          scaleX: 1,
+          stagger: props.stagger
+        })
       }
-    }
-  )
+    })
 
-  scrollTriggerInstance = tl.scrollTrigger || null
-}
-
-onMounted(() => {
-  initializeAnimation()
+    ScrollTrigger.refresh()
+  }, el)
 })
 
 onUnmounted(() => {
-  if (scrollTriggerInstance) {
-    scrollTriggerInstance.kill()
-  }
+  ctx && ctx.revert()
 })
-
-watch(
-  [() => props.children, () => props.animationDuration, () => props.ease, () => props.scrollStart, () => props.scrollEnd, () => props.stagger],
-  () => { initializeAnimation() },
-  { deep: true }
-)
 </script>
 
 <template>
@@ -88,7 +72,7 @@ watch(
       style="font-size: clamp(1.6rem, 8vw, 10rem)"
     >
       <span v-for="(char, index) in splitText" :key="index" class="inline-block char">
-        {{ char === ' ' ? ' ' : char }}
+        {{ char === ' ' ? ' ' : char }}
       </span>
     </span>
   </h2>

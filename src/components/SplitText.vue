@@ -1,132 +1,66 @@
 <script setup>
-import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { SplitText as GSAPSplitText } from 'gsap/SplitText'
 
-gsap.registerPlugin(ScrollTrigger, GSAPSplitText)
+gsap.registerPlugin(ScrollTrigger)
 
 const props = defineProps({
   text: { type: String, required: true },
   className: { type: String, default: '' },
-  delay: { type: Number, default: 50 },
-  duration: { type: Number, default: 1.25 },
-  ease: { type: [String, Function], default: 'power3.out' },
-  splitType: { type: String, default: 'chars' },
-  from: { type: Object, default: () => ({ opacity: 0, y: 40 }) },
-  to: { type: Object, default: () => ({ opacity: 1, y: 0 }) },
-  threshold: { type: Number, default: 0.1 },
-  rootMargin: { type: String, default: '-100px' },
+  delay: { type: Number, default: 80 },
+  duration: { type: Number, default: 1 },
+  ease: { type: String, default: 'power3.out' },
   tag: { type: String, default: 'p' },
   textAlign: { type: String, default: 'center' }
 })
 
-const emit = defineEmits(['animation-complete'])
-
 const elRef = ref(null)
-const fontsLoaded = ref(false)
-const animationCompleted = ref(false)
+let ctx = null
 
-let splitInstance = null
+onMounted(async () => {
+  await nextTick()
+  if (!elRef.value) return
 
-onMounted(() => {
-  if (document.fonts.status === 'loaded') {
-    fontsLoaded.value = true
-  } else {
-    document.fonts.ready.then(() => {
-      fontsLoaded.value = true
-    })
-  }
-})
+  ctx = gsap.context(() => {
+    const chars = elRef.value.querySelectorAll('.split-char')
+    if (!chars.length) return
 
-const runAnimation = () => {
-  if (!elRef.value || !props.text || !fontsLoaded.value) return
-  if (animationCompleted.value) return
+    gsap.set(chars, { opacity: 0, y: 50 })
 
-  const el = elRef.value
-
-  if (el._rbsplitInstance) {
-    try { el._rbsplitInstance.revert() } catch {}
-    el._rbsplitInstance = undefined
-  }
-
-  const startPct = (1 - props.threshold) * 100
-  const marginMatch = /^(-?\d+(?:\.\d+)?)(px|em|rem|%)?$/.exec(props.rootMargin)
-  const marginValue = marginMatch ? parseFloat(marginMatch[1]) : 0
-  const marginUnit = marginMatch?.[2] || 'px'
-  const sign = marginValue === 0 ? '' : marginValue < 0 ? `-=${Math.abs(marginValue)}${marginUnit}` : `+=${marginValue}${marginUnit}`
-  const start = `top ${startPct}%${sign}`
-
-  let targets = []
-
-  const assignTargets = (self) => {
-    if (props.splitType.includes('chars') && self.chars?.length) targets = self.chars
-    if (!targets.length && props.splitType.includes('words') && self.words?.length) targets = self.words
-    if (!targets.length && props.splitType.includes('lines') && self.lines?.length) targets = self.lines
-    if (!targets.length) targets = self.chars || self.words || self.lines
-  }
-
-  splitInstance = new GSAPSplitText(el, {
-    type: props.splitType,
-    smartWrap: true,
-    autoSplit: props.splitType === 'lines',
-    linesClass: 'split-line',
-    wordsClass: 'split-word',
-    charsClass: 'split-char',
-    reduceWhiteSpace: false,
-    onSplit(self) {
-      assignTargets(self)
-      return gsap.fromTo(
-        targets,
-        { ...props.from },
-        {
-          ...props.to,
+    ScrollTrigger.create({
+      trigger: elRef.value,
+      start: 'top 85%',
+      once: true,
+      onEnter: () => {
+        gsap.to(chars, {
+          opacity: 1,
+          y: 0,
           duration: props.duration,
           ease: props.ease,
-          stagger: props.delay / 1000,
-          scrollTrigger: {
-            trigger: el,
-            start,
-            once: true,
-            fastScrollEnd: true,
-            anticipatePin: 0.4
-          },
-          onComplete() {
-            animationCompleted.value = true
-            emit('animation-complete')
-          },
-          willChange: 'transform, opacity',
-          force3D: true
-        }
-      )
-    }
-  })
+          stagger: props.delay / 1000
+        })
+      }
+    })
 
-  el._rbsplitInstance = splitInstance
-}
-
-watch(
-  () => [props.text, props.delay, props.duration, props.ease, props.splitType, JSON.stringify(props.from), JSON.stringify(props.to), props.threshold, props.rootMargin, fontsLoaded.value],
-  runAnimation,
-  { deep: true }
-)
-
-onBeforeUnmount(() => {
-  ScrollTrigger.getAll().forEach(st => {
-    if (st.trigger === elRef.value) st.kill()
-  })
-  try { splitInstance?.revert() } catch {}
+    ScrollTrigger.refresh()
+  }, elRef.value)
 })
 
-const styles = computed(() => ({
-  textAlign: props.textAlign,
-  wordWrap: 'break-word',
-  willChange: 'transform, opacity'
-}))
+onUnmounted(() => {
+  ctx && ctx.revert()
+})
+
+const chars = props.text.split('')
 </script>
 
 <template>
-  <component :is="tag" ref="elRef" :style="styles" :class="`split-parent overflow-hidden inline-block whitespace-normal ${className}`">
-    {{ text }}
+  <component :is="tag" ref="elRef" :class="`split-parent ${className}`" :style="{ textAlign }">
+    <span
+      v-for="(char, i) in chars"
+      :key="i"
+      class="inline-block split-char"
+      :style="{ willChange: 'transform, opacity' }"
+    >{{ char === ' ' ? ' ' : char }}</span>
   </component>
 </template>

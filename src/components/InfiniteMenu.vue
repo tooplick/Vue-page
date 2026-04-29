@@ -1,60 +1,48 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { mat4, quat, vec2, vec3 } from 'gl-matrix';
-
-const DEFAULT_ITEMS = [
-  {
-    image: 'https://picsum.photos/900/900?grayscale',
-    link: 'https://google.com/',
-    title: '',
-    description: ''
-  }
-];
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { mat4, quat, vec2, vec3 } from 'gl-matrix'
 
 const props = defineProps({
-  items: {
-    type: Array,
-    default: () => [
-      {
-        image: 'https://picsum.photos/900/900?grayscale',
-        link: 'https://google.com/',
-        title: '',
-        description: ''
-      }
-    ]
-  },
-  scale: {
-    type: Number,
-    default: 1.0
-  }
-});
+  items: { type: Array, default: () => [{ image: 'https://picsum.photos/900/900?grayscale', link: 'https://google.com/', title: '', description: '' }] },
+  scale: { type: Number, default: 1.0 }
+})
 
-const canvasRef = ref(null);
-const activeItem = ref(null);
-const isMoving = ref(false);
-const resolvedItems = computed(() => (props.items?.length ? props.items : DEFAULT_ITEMS));
+const emit = defineEmits(['click'])
 
-let animationId = null;
-let infiniteMenu = null;
+const canvasRef = ref(null)
+const activeItem = ref(null)
+const isMoving = ref(false)
+const resolvedItems = computed(() => (props.items?.length ? props.items : [{ image: 'https://picsum.photos/900/900?grayscale', link: 'https://google.com/', title: '', description: '' }]))
 
+let animationId = null
+let infiniteMenu = null
+
+// ─── Shader sources ──────────────────────────────────────────────────────────
 const discVertShaderSource = `#version 300 es
+
 uniform mat4 uWorldMatrix;
 uniform mat4 uViewMatrix;
 uniform mat4 uProjectionMatrix;
 uniform vec3 uCameraPosition;
 uniform vec4 uRotationAxisVelocity;
+
 in vec3 aModelPosition;
 in vec3 aModelNormal;
 in vec2 aModelUvs;
 in mat4 aInstanceMatrix;
+
 out vec2 vUvs;
 out float vAlpha;
 flat out int vInstanceId;
+
 #define PI 3.141593
+
 void main() {
     vec4 worldPosition = uWorldMatrix * aInstanceMatrix * vec4(aModelPosition, 1.);
+
     vec3 centerPos = (uWorldMatrix * aInstanceMatrix * vec4(0., 0., 0., 1.)).xyz;
     float radius = length(centerPos.xyz);
+
     if (gl_VertexID > 0) {
         vec3 rotationAxis = uRotationAxisVelocity.xyz;
         float rotationVelocity = min(.15, uRotationAxisVelocity.w * 15.);
@@ -65,23 +53,30 @@ void main() {
         strength = rotationVelocity * sign(strength) * abs(invAbsStrength * invAbsStrength * invAbsStrength + 1.);
         worldPosition.xyz += stretchDir * strength;
     }
+
     worldPosition.xyz = radius * normalize(worldPosition.xyz);
+
     gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
+
     vAlpha = smoothstep(0.5, 1., normalize(worldPosition.xyz).z) * .9 + .1;
     vUvs = aModelUvs;
     vInstanceId = gl_InstanceID;
 }
-`;
+`
 
 const discFragShaderSource = `#version 300 es
 precision highp float;
+
 uniform sampler2D uTex;
 uniform int uItemCount;
 uniform int uAtlasSize;
+
 out vec4 outColor;
+
 in vec2 vUvs;
 in float vAlpha;
 flat in int vInstanceId;
+
 void main() {
     int itemIndex = vInstanceId % uItemCount;
     int cellsPerRow = uAtlasSize;
@@ -89,737 +84,1003 @@ void main() {
     int cellY = itemIndex / cellsPerRow;
     vec2 cellSize = vec2(1.0) / vec2(float(cellsPerRow));
     vec2 cellOffset = vec2(float(cellX), float(cellY)) * cellSize;
+
     ivec2 texSize = textureSize(uTex, 0);
     float imageAspect = float(texSize.x) / float(texSize.y);
     float containerAspect = 1.0;
-    float scale = max(imageAspect / containerAspect, containerAspect / imageAspect);
+
+    float scale = max(imageAspect / containerAspect,
+                     containerAspect / imageAspect);
+
     vec2 st = vec2(vUvs.x, 1.0 - vUvs.y);
     st = (st - 0.5) * scale + 0.5;
+
     st = clamp(st, 0.0, 1.0);
+
     st = st * cellSize + cellOffset;
+
     outColor = texture(uTex, st);
     outColor.a *= vAlpha;
 }
-`;
+`
 
-// ─── Face ───────────────────────────────────────────────────────────────────
+// ─── Geometry classes ─────────────────────────────────────────────────────────
 class Face {
   constructor(a, b, c) {
-    this.a = a;
-    this.b = b;
-    this.c = c;
+    this.a = a
+    this.b = b
+    this.c = c
   }
 }
 
-// ─── Vertex ─────────────────────────────────────────────────────────────────
 class Vertex {
-  constructor(position, normal, uv) {
-    this.position = position;
-    this.normal = normal;
-    this.uv = uv;
+  constructor(x, y, z) {
+    this.position = vec3.fromValues(x, y, z)
+    this.normal = vec3.create()
+    this.uv = vec2.create()
   }
 }
 
-// ─── Geometry ───────────────────────────────────────────────────────────────
 class Geometry {
   constructor() {
-    this.vertices = [];
-    this.faces = [];
+    this.vertices = []
+    this.faces = []
   }
 
-  addVertex(vertex) {
-    this.vertices.push(vertex);
-    return this.vertices.length - 1;
-  }
-
-  addFace(face) {
-    this.faces.push(face);
-  }
-
-  subdivide(depth = 0) {
-    let faces = this.faces;
-    for (let i = 0; i < depth; i++) {
-      const newFaces = [];
-      const midPointCache = {};
-      for (const face of faces) {
-        const ab = this._getMidPoint(face.a, face.b, midPointCache);
-        const bc = this._getMidPoint(face.b, face.c, midPointCache);
-        const ca = this._getMidPoint(face.c, face.a, midPointCache);
-        newFaces.push(new Face(face.a, ab, ca));
-        newFaces.push(new Face(face.b, bc, ab));
-        newFaces.push(new Face(face.c, ca, bc));
-        newFaces.push(new Face(ab, bc, ca));
-      }
-      faces = newFaces;
+  addVertex(...args) {
+    for (let i = 0; i < args.length; i += 3) {
+      this.vertices.push(new Vertex(args[i], args[i + 1], args[i + 2]))
     }
-    this.faces = faces;
+    return this
   }
 
-  spherize(radius) {
-    for (const vertex of this.vertices) {
-      const pos = vertex.position;
-      vec3.normalize(pos, pos);
-      vec3.scale(pos, pos, radius);
-      vec3.copy(vertex.normal, pos);
-      vec3.normalize(vertex.normal, vertex.normal);
+  addFace(...args) {
+    for (let i = 0; i < args.length; i += 3) {
+      this.faces.push(new Face(args[i], args[i + 1], args[i + 2]))
     }
+    return this
   }
 
-  _getMidPoint(i1, i2, cache) {
-    const key = i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
-    if (cache[key] !== undefined) {
-      return cache[key];
+  get lastVertex() {
+    return this.vertices[this.vertices.length - 1]
+  }
+
+  subdivide(divisions = 1) {
+    const midPointCache = {}
+    let f = this.faces
+
+    for (let div = 0; div < divisions; ++div) {
+      const newFaces = new Array(f.length * 4)
+
+      f.forEach((face, ndx) => {
+        const mAB = this.getMidPoint(face.a, face.b, midPointCache)
+        const mBC = this.getMidPoint(face.b, face.c, midPointCache)
+        const mCA = this.getMidPoint(face.c, face.a, midPointCache)
+
+        const i = ndx * 4
+        newFaces[i + 0] = new Face(face.a, mAB, mCA)
+        newFaces[i + 1] = new Face(face.b, mBC, mAB)
+        newFaces[i + 2] = new Face(face.c, mCA, mBC)
+        newFaces[i + 3] = new Face(mAB, mBC, mCA)
+      })
+
+      f = newFaces
     }
-    const v1 = this.vertices[i1];
-    const v2 = this.vertices[i2];
-    const midPos = vec3.create();
-    vec3.add(midPos, v1.position, v2.position);
-    vec3.scale(midPos, midPos, 0.5);
-    const midNormal = vec3.create();
-    vec3.add(midNormal, v1.normal, v2.normal);
-    vec3.normalize(midNormal, midNormal);
-    const midUv = vec2.create();
-    vec2.add(midUv, v1.uv, v2.uv);
-    vec2.scale(midUv, midUv, 0.5);
-    const idx = this.addVertex(new Vertex(midPos, midNormal, midUv));
-    cache[key] = idx;
-    return idx;
+
+    this.faces = f
+    return this
+  }
+
+  spherize(radius = 1) {
+    this.vertices.forEach(vertex => {
+      vec3.normalize(vertex.normal, vertex.position)
+      vec3.scale(vertex.position, vertex.normal, radius)
+    })
+    return this
   }
 
   get data() {
     return {
       vertices: this.vertexData,
+      indices: this.indexData,
       normals: this.normalData,
-      uvs: this.uvData,
-      indices: this.indexData
-    };
+      uvs: this.uvData
+    }
   }
 
   get vertexData() {
-    const out = new Float32Array(this.vertices.length * 3);
-    for (let i = 0; i < this.vertices.length; i++) {
-      const p = this.vertices[i].position;
-      out[i * 3] = p[0];
-      out[i * 3 + 1] = p[1];
-      out[i * 3 + 2] = p[2];
-    }
-    return out;
+    return new Float32Array(this.vertices.flatMap(v => Array.from(v.position)))
   }
 
   get normalData() {
-    const out = new Float32Array(this.vertices.length * 3);
-    for (let i = 0; i < this.vertices.length; i++) {
-      const n = this.vertices[i].normal;
-      out[i * 3] = n[0];
-      out[i * 3 + 1] = n[1];
-      out[i * 3 + 2] = n[2];
-    }
-    return out;
+    return new Float32Array(this.vertices.flatMap(v => Array.from(v.normal)))
   }
 
   get uvData() {
-    const out = new Float32Array(this.vertices.length * 2);
-    for (let i = 0; i < this.vertices.length; i++) {
-      const u = this.vertices[i].uv;
-      out[i * 2] = u[0];
-      out[i * 2 + 1] = u[1];
-    }
-    return out;
+    return new Float32Array(this.vertices.flatMap(v => Array.from(v.uv)))
   }
 
   get indexData() {
-    const out = new Uint16Array(this.faces.length * 3);
-    for (let i = 0; i < this.faces.length; i++) {
-      const f = this.faces[i];
-      out[i * 3] = f.a;
-      out[i * 3 + 1] = f.b;
-      out[i * 3 + 2] = f.c;
+    return new Uint16Array(this.faces.flatMap(f => [f.a, f.b, f.c]))
+  }
+
+  getMidPoint(ndxA, ndxB, cache) {
+    const cacheKey = ndxA < ndxB ? `k_${ndxB}_${ndxA}` : `k_${ndxA}_${ndxB}`
+    if (Object.prototype.hasOwnProperty.call(cache, cacheKey)) {
+      return cache[cacheKey]
     }
-    return out;
+    const a = this.vertices[ndxA].position
+    const b = this.vertices[ndxB].position
+    const ndx = this.vertices.length
+    cache[cacheKey] = ndx
+    this.addVertex((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, (a[2] + b[2]) * 0.5)
+    return ndx
   }
 }
 
-// ─── IcosahedronGeometry ────────────────────────────────────────────────────
 class IcosahedronGeometry extends Geometry {
   constructor() {
-    super();
-    const t = (1 + Math.sqrt(5)) / 2;
-    const verts = [
-      [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0],
-      [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
-      [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]
-    ];
-    for (const v of verts) {
-      const pos = vec3.fromValues(v[0], v[1], v[2]);
-      const normal = vec3.create();
-      vec3.normalize(normal, pos);
-      this.addVertex(new Vertex(pos, normal, vec2.fromValues(0, 0)));
-    }
-    const tris = [
-      [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-      [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-      [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-      [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]
-    ];
-    for (const t of tris) {
-      this.addFace(new Face(t[0], t[1], t[2]));
-    }
-    this._generateUVs();
-  }
-
-  _generateUVs() {
-    for (let i = 0; i < this.vertices.length; i++) {
-      const pos = this.vertices[i].position;
-      const n = vec3.create();
-      vec3.normalize(n, pos);
-      const u = 0.5 + Math.atan2(n[2], n[0]) / (2 * Math.PI);
-      const v = 0.5 - Math.asin(n[1]) / Math.PI;
-      this.vertices[i].uv = vec2.fromValues(u, v);
-    }
+    super()
+    const t = Math.sqrt(5) * 0.5 + 0.5
+    this.addVertex(
+      -1, t, 0,
+      1, t, 0,
+      -1, -t, 0,
+      1, -t, 0,
+      0, -1, t,
+      0, 1, t,
+      0, -1, -t,
+      0, 1, -t,
+      t, 0, -1,
+      t, 0, 1,
+      -t, 0, -1,
+      -t, 0, 1
+    ).addFace(
+      0, 11, 5,
+      0, 5, 1,
+      0, 1, 7,
+      0, 7, 10,
+      0, 10, 11,
+      1, 5, 9,
+      5, 11, 4,
+      11, 10, 2,
+      10, 7, 6,
+      7, 1, 8,
+      3, 9, 4,
+      3, 4, 2,
+      3, 2, 6,
+      3, 6, 8,
+      3, 8, 9,
+      4, 9, 5,
+      2, 4, 11,
+      6, 2, 10,
+      8, 6, 7,
+      9, 8, 1
+    )
   }
 }
 
-// ─── DiscGeometry ───────────────────────────────────────────────────────────
 class DiscGeometry extends Geometry {
   constructor(steps = 4, radius = 1) {
-    super();
-    const angleStep = (2 * Math.PI) / steps;
-    this.addVertex(new Vertex(vec3.fromValues(0, 0, 0), vec3.fromValues(0, 0, 1), vec2.fromValues(0.5, 0.5)));
-    for (let i = 0; i < steps; i++) {
-      const angle = i * angleStep;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      const u = (Math.cos(angle) + 1) * 0.5;
-      const v = (Math.sin(angle) + 1) * 0.5;
-      this.addVertex(new Vertex(vec3.fromValues(x, y, 0), vec3.fromValues(0, 0, 1), vec2.fromValues(u, v)));
+    super()
+    steps = Math.max(4, steps)
+
+    const alpha = (2 * Math.PI) / steps
+
+    this.addVertex(0, 0, 0)
+    this.lastVertex.uv[0] = 0.5
+    this.lastVertex.uv[1] = 0.5
+
+    for (let i = 0; i < steps; ++i) {
+      const x = Math.cos(alpha * i)
+      const y = Math.sin(alpha * i)
+      this.addVertex(radius * x, radius * y, 0)
+      this.lastVertex.uv[0] = x * 0.5 + 0.5
+      this.lastVertex.uv[1] = y * 0.5 + 0.5
+
+      if (i > 0) {
+        this.addFace(0, i, i + 1)
+      }
     }
-    for (let i = 0; i < steps; i++) {
-      const next = (i % steps) + 1;
-      this.addFace(new Face(0, i + 1, next === steps ? 1 : next + 1));
-    }
+    this.addFace(0, steps, 1)
   }
 }
 
-// ─── Helper functions ───────────────────────────────────────────────────────
+// ─── WebGL helpers ────────────────────────────────────────────────────────────
 function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
+  const shader = gl.createShader(type)
+  if (!shader) return null
+
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+  const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS)
+
+  if (success) {
+    return shader
   }
-  return shader;
+
+  console.error(gl.getShaderInfoLog(shader))
+  gl.deleteShader(shader)
+  return null
 }
 
-function createProgram(gl, vertSource, fragSource) {
-  const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSource);
-  const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSource);
-  if (!vertShader || !fragShader) return null;
-  const program = gl.createProgram();
-  gl.attachShader(program, vertShader);
-  gl.attachShader(program, fragShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program link error:', gl.getProgramInfoLog(program));
-    gl.deleteProgram(program);
-    return null;
-  }
-  return program;
-}
+function createProgram(gl, shaderSources, transformFeedbackVaryings, attribLocations) {
+  const program = gl.createProgram()
+  if (!program) return null
 
-function makeVertexArray(gl, program, buffers) {
-  const vao = gl.createVertexArray();
-  gl.bindVertexArray(vao);
-  for (const buf of buffers) {
-    const loc = gl.getAttribLocation(program, buf.name);
-    if (loc === -1) continue;
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf.buffer);
-    const numComponents = buf.numComponents || 3;
-    const type = buf.type || gl.FLOAT;
-    const normalize = buf.normalize || false;
-    const stride = buf.stride || 0;
-    const offset = buf.offset || 0;
-    if (buf.instanced) {
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, numComponents, type, normalize, stride, offset);
-      gl.vertexAttribDivisor(loc, 1);
-    } else {
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, numComponents, type, normalize, stride, offset);
+  ;[gl.VERTEX_SHADER, gl.FRAGMENT_SHADER].forEach((type, ndx) => {
+    const shader = createShader(gl, type, shaderSources[ndx])
+    if (shader) gl.attachShader(program, shader)
+  })
+
+  if (transformFeedbackVaryings) {
+    gl.transformFeedbackVaryings(program, transformFeedbackVaryings, gl.SEPARATE_ATTRIBS)
+  }
+
+  if (attribLocations) {
+    for (const attrib in attribLocations) {
+      gl.bindAttribLocation(program, attribLocations[attrib], attrib)
     }
   }
-  gl.bindVertexArray(null);
-  return vao;
+
+  gl.linkProgram(program)
+  const success = gl.getProgramParameter(program, gl.LINK_STATUS)
+
+  if (success) {
+    return program
+  }
+
+  console.error(gl.getProgramInfoLog(program))
+  gl.deleteProgram(program)
+  return null
+}
+
+function makeVertexArray(gl, bufLocNumElmPairs, indices) {
+  const va = gl.createVertexArray()
+  if (!va) return null
+
+  gl.bindVertexArray(va)
+
+  for (const [buffer, loc, numElem] of bufLocNumElmPairs) {
+    if (loc === -1) continue
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+    gl.enableVertexAttribArray(loc)
+    gl.vertexAttribPointer(loc, numElem, gl.FLOAT, false, 0, 0)
+  }
+
+  if (indices) {
+    const indexBuffer = gl.createBuffer()
+    if (indexBuffer) {
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer)
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW)
+    }
+  }
+
+  gl.bindVertexArray(null)
+  return va
 }
 
 function resizeCanvasToDisplaySize(canvas) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = canvas.clientWidth * dpr | 0;
-  const h = canvas.clientHeight * dpr | 0;
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w;
-    canvas.height = h;
-    return true;
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  const displayWidth = Math.round(canvas.clientWidth * dpr)
+  const displayHeight = Math.round(canvas.clientHeight * dpr)
+  const needResize = canvas.width !== displayWidth || canvas.height !== displayHeight
+  if (needResize) {
+    canvas.width = displayWidth
+    canvas.height = displayHeight
   }
-  return false;
+  return needResize
 }
 
-function makeBuffer(gl, data, usage) {
-  const buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, data, usage || gl.STATIC_DRAW);
-  return buffer;
+function makeBuffer(gl, sizeOrData, usage) {
+  const buf = gl.createBuffer()
+  if (!buf) return null
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+  if (typeof sizeOrData === 'number') {
+    gl.bufferData(gl.ARRAY_BUFFER, sizeOrData, usage)
+  } else if (sizeOrData instanceof ArrayBuffer) {
+    gl.bufferData(gl.ARRAY_BUFFER, sizeOrData, usage)
+  } else {
+    gl.bufferData(gl.ARRAY_BUFFER, sizeOrData, usage)
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, null)
+  return buf
 }
 
-function createAndSetupTexture(gl) {
-  const texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  return texture;
+function createAndSetupTexture(gl, minFilter, magFilter, wrapS, wrapT) {
+  const texture = gl.createTexture()
+  if (!texture) return null
+
+  gl.bindTexture(gl.TEXTURE_2D, texture)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapS)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter)
+  return texture
 }
 
-// ─── ArcballControl ─────────────────────────────────────────────────────────
+// ─── ArcballControl ──────────────────────────────────────────────────────────
 class ArcballControl {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.isDragging = false;
-    this.previousMouse = vec2.create();
-    this.currentMouse = vec2.create();
-    this.rotationVelocity = 0;
-    this.rotationAxis = vec3.fromValues(0, 1, 0);
-    this.rotationQuaternion = quat.create();
-    this.tempQuaternion = quat.create();
-    this.currentQuaternion = quat.create();
-    this._onMouseDown = this._onMouseDown.bind(this);
-    this._onMouseMove = this._onMouseMove.bind(this);
-    this._onMouseUp = this._onMouseUp.bind(this);
-    this._onTouchStart = this._onTouchStart.bind(this);
-    this._onTouchMove = this._onTouchMove.bind(this);
-    this._onTouchEnd = this._onTouchEnd.bind(this);
-    canvas.addEventListener('mousedown', this._onMouseDown);
-    canvas.addEventListener('mousemove', this._onMouseMove);
-    canvas.addEventListener('mouseup', this._onMouseUp);
-    canvas.addEventListener('mouseleave', this._onMouseUp);
-    canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', this._onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', this._onTouchEnd);
+  constructor(canvas, updateCallback) {
+    this.canvas = canvas
+    this.updateCallback = updateCallback
+    this.isPointerDown = false
+    this.orientation = quat.create()
+    this.pointerRotation = quat.create()
+    this.rotationVelocity = 0
+    this.rotationAxis = vec3.fromValues(1, 0, 0)
+    this.snapDirection = vec3.fromValues(0, 0, -1)
+    this.snapTargetDirection = undefined
+    this.EPSILON = 0.1
+    this.IDENTITY_QUAT = quat.create()
+
+    this.pointerPos = vec2.create()
+    this.previousPointerPos = vec2.create()
+    this._rotationVelocity = 0
+    this._combinedQuat = quat.create()
+
+    this.setupEventListeners()
   }
 
-  _getCanvasRelativeMouse(event) {
-    const rect = this.canvas.getBoundingClientRect();
-    return vec2.fromValues(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -(((event.clientY - rect.top) / rect.height) * 2 - 1)
-    );
+  setupEventListeners() {
+    this.canvas.addEventListener('pointerdown', e => {
+      vec2.set(this.pointerPos, e.clientX, e.clientY)
+      vec2.copy(this.previousPointerPos, this.pointerPos)
+      this.isPointerDown = true
+    })
+
+    this.canvas.addEventListener('pointerup', () => {
+      this.isPointerDown = false
+    })
+
+    this.canvas.addEventListener('pointerleave', () => {
+      this.isPointerDown = false
+    })
+
+    this.canvas.addEventListener('pointermove', e => {
+      if (this.isPointerDown) {
+        vec2.set(this.pointerPos, e.clientX, e.clientY)
+      }
+    })
+
+    this.canvas.style.touchAction = 'none'
   }
 
-  _mapToSphere(mouse) {
-    const x = mouse[0];
-    const y = mouse[1];
-    const lengthSq = x * x + y * y;
-    const z = lengthSq <= 1 ? Math.sqrt(1 - lengthSq) : 0;
-    const result = vec3.fromValues(x, y, z);
-    vec3.normalize(result, result);
-    return result;
-  }
+  update(deltaTime, targetFrameDuration = 16) {
+    const timeScale = deltaTime / targetFrameDuration + 0.00001
+    let angleFactor = timeScale
+    const snapRotation = quat.create()
 
-  _onMouseDown(event) {
-    event.preventDefault();
-    this.isDragging = true;
-    vec2.copy(this.previousMouse, this._getCanvasRelativeMouse(event));
-  }
+    if (this.isPointerDown) {
+      const INTENSITY = 0.3 * timeScale
+      const ANGLE_AMPLIFICATION = 5 / timeScale
 
-  _onMouseMove(event) {
-    if (!this.isDragging) return;
-    vec2.copy(this.currentMouse, this._getCanvasRelativeMouse(event));
-    this._updateRotation();
-    vec2.copy(this.previousMouse, this.currentMouse);
-  }
+      const midPointerPos = vec2.sub(vec2.create(), this.pointerPos, this.previousPointerPos)
+      vec2.scale(midPointerPos, midPointerPos, INTENSITY)
 
-  _onMouseUp() {
-    this.isDragging = false;
-  }
+      if (vec2.sqrLen(midPointerPos) > this.EPSILON) {
+        vec2.add(midPointerPos, this.previousPointerPos, midPointerPos)
 
-  _onTouchStart(event) {
-    event.preventDefault();
-    if (event.touches.length === 1) {
-      this.isDragging = true;
-      vec2.copy(this.previousMouse, this._getCanvasRelativeMouse(event.touches[0]));
-    }
-  }
+        const p = this.project(midPointerPos)
+        const q = this.project(this.previousPointerPos)
+        const a = vec3.normalize(vec3.create(), p)
+        const b = vec3.normalize(vec3.create(), q)
 
-  _onTouchMove(event) {
-    event.preventDefault();
-    if (!this.isDragging || event.touches.length !== 1) return;
-    vec2.copy(this.currentMouse, this._getCanvasRelativeMouse(event.touches[0]));
-    this._updateRotation();
-    vec2.copy(this.previousMouse, this.currentMouse);
-  }
+        vec2.copy(this.previousPointerPos, midPointerPos)
 
-  _onTouchEnd() {
-    this.isDragging = false;
-  }
+        angleFactor *= ANGLE_AMPLIFICATION
 
-  _updateRotation() {
-    const prevSphere = this._mapToSphere(this.previousMouse);
-    const currSphere = this._mapToSphere(this.currentMouse);
-    const axis = vec3.create();
-    vec3.cross(axis, prevSphere, currSphere);
-    const axisLen = vec3.length(axis);
-    if (axisLen < 1e-6) return;
-    vec3.normalize(axis, axis);
-    const dot = vec3.dot(prevSphere, currSphere);
-    const angle = Math.acos(Math.min(1, Math.max(-1, dot)));
-    quat.setAxisAngle(this.tempQuaternion, axis, angle);
-    quat.multiply(this.rotationQuaternion, this.tempQuaternion, this.rotationQuaternion);
-    this.rotationVelocity = angle * 0.5;
-    vec3.copy(this.rotationAxis, axis);
-  }
+        this.quatFromVectors(a, b, this.pointerRotation, angleFactor)
+      } else {
+        quat.slerp(this.pointerRotation, this.pointerRotation, this.IDENTITY_QUAT, INTENSITY)
+      }
+    } else {
+      const INTENSITY = 0.1 * timeScale
+      quat.slerp(this.pointerRotation, this.pointerRotation, this.IDENTITY_QUAT, INTENSITY)
 
-  update() {
-    if (!this.isDragging) {
-      this.rotationVelocity *= 0.95;
-      if (this.rotationVelocity > 0.001) {
-        quat.setAxisAngle(this.tempQuaternion, this.rotationAxis, this.rotationVelocity * 0.02);
-        quat.multiply(this.rotationQuaternion, this.tempQuaternion, this.rotationQuaternion);
+      if (this.snapTargetDirection) {
+        const SNAPPING_INTENSITY = 0.2
+        const a = this.snapTargetDirection
+        const b = this.snapDirection
+        const sqrDist = vec3.squaredDistance(a, b)
+        const distanceFactor = Math.max(0.1, 1 - sqrDist * 10)
+        angleFactor *= SNAPPING_INTENSITY * distanceFactor
+        this.quatFromVectors(a, b, snapRotation, angleFactor)
       }
     }
-    quat.copy(this.currentQuaternion, this.rotationQuaternion);
+
+    const combinedQuat = quat.multiply(quat.create(), snapRotation, this.pointerRotation)
+    this.orientation = quat.multiply(quat.create(), combinedQuat, this.orientation)
+    quat.normalize(this.orientation, this.orientation)
+
+    const RA_INTENSITY = 0.8 * timeScale
+    quat.slerp(this._combinedQuat, this._combinedQuat, combinedQuat, RA_INTENSITY)
+    quat.normalize(this._combinedQuat, this._combinedQuat)
+
+    const rad = Math.acos(this._combinedQuat[3]) * 2.0
+    const s = Math.sin(rad / 2.0)
+    let rv = 0
+    if (s > 0.000001) {
+      rv = rad / (2 * Math.PI)
+      this.rotationAxis[0] = this._combinedQuat[0] / s
+      this.rotationAxis[1] = this._combinedQuat[1] / s
+      this.rotationAxis[2] = this._combinedQuat[2] / s
+    }
+
+    const RV_INTENSITY = 0.5 * timeScale
+    this._rotationVelocity += (rv - this._rotationVelocity) * RV_INTENSITY
+    this.rotationVelocity = this._rotationVelocity / timeScale
+
+    this.updateCallback?.(deltaTime)
   }
 
-  getMatrix() {
-    const m = mat4.create();
-    mat4.fromQuat(m, this.currentQuaternion);
-    return m;
+  quatFromVectors(a, b, out, angleFactor = 1) {
+    const axis = vec3.cross(vec3.create(), a, b)
+    vec3.normalize(axis, axis)
+    const d = Math.max(-1, Math.min(1, vec3.dot(a, b)))
+    const angle = Math.acos(d) * angleFactor
+    quat.setAxisAngle(out, axis, angle)
+    return { q: out, axis, angle }
   }
 
-  destroy() {
-    this.canvas.removeEventListener('mousedown', this._onMouseDown);
-    this.canvas.removeEventListener('mousemove', this._onMouseMove);
-    this.canvas.removeEventListener('mouseup', this._onMouseUp);
-    this.canvas.removeEventListener('mouseleave', this._onMouseUp);
-    this.canvas.removeEventListener('touchstart', this._onTouchStart);
-    this.canvas.removeEventListener('touchmove', this._onTouchMove);
-    this.canvas.removeEventListener('touchend', this._onTouchEnd);
+  project(pos) {
+    const r = 2
+    const w = this.canvas.clientWidth
+    const h = this.canvas.clientHeight
+    const s = Math.max(w, h) - 1
+
+    const x = (2 * pos[0] - w - 1) / s
+    const y = (2 * pos[1] - h - 1) / s
+    let z = 0
+    const xySq = x * x + y * y
+    const rSq = r * r
+
+    if (xySq <= rSq / 2.0) {
+      z = Math.sqrt(rSq - xySq)
+    } else {
+      z = rSq / Math.sqrt(xySq)
+    }
+    return vec3.fromValues(-x, y, z)
   }
 }
 
-// ─── InfiniteGridMenu ───────────────────────────────────────────────────────
+// ─── InfiniteGridMenu ────────────────────────────────────────────────────────
 class InfiniteGridMenu {
-  constructor(canvas, items, scale) {
-    this.canvas = canvas;
-    this.items = items;
-    this.scale = scale || 1.0;
-    this.gl = canvas.getContext('webgl2', { antialias: true, alpha: true });
+  constructor(canvas, items, onActiveItemChange, onMovementChange, onInit, scale = 3.0) {
+    this.TARGET_FRAME_DURATION = 1000 / 60
+    this.SPHERE_RADIUS = 2
+    this.time = 0
+    this.deltaTime = 0
+    this.deltaFrames = 0
+    this.frames = 0
+
+    this.camera = {
+      matrix: mat4.create(),
+      near: 0.1,
+      far: 40,
+      fov: Math.PI / 4,
+      aspect: 1,
+      position: vec3.fromValues(0, 0, 3),
+      up: vec3.fromValues(0, 1, 0),
+      matrices: {
+        view: mat4.create(),
+        projection: mat4.create(),
+        inversProjection: mat4.create()
+      }
+    }
+
+    this.nearestVertexIndex = null
+    this.smoothRotationVelocity = 0
+    this.scaleFactor = scale
+    this.movementActive = false
+    this._rafId = null
+
+    this.canvas = canvas
+    this.items = items
+    this.onActiveItemChange = onActiveItemChange
+    this.onMovementChange = onMovementChange
+
+    this.camera.position[2] = scale
+    this.worldMatrix = mat4.create()
+
+    this.init()
+
+    if (onInit) {
+      onInit(this)
+    }
+  }
+
+  init() {
+    this.gl = this.canvas.getContext('webgl2', { antialias: true, alpha: false })
     if (!this.gl) {
-      console.error('WebGL2 not supported');
-      return;
+      throw new Error('No WebGL 2 context!')
     }
-    this.program = createProgram(this.gl, discVertShaderSource, discFragShaderSource);
-    if (!this.program) return;
-    this.worldMatrixLocation = this.gl.getUniformLocation(this.program, 'uWorldMatrix');
-    this.viewMatrixLocation = this.gl.getUniformLocation(this.program, 'uViewMatrix');
-    this.projectionMatrixLocation = this.gl.getUniformLocation(this.program, 'uProjectionMatrix');
-    this.cameraPositionLocation = this.gl.getUniformLocation(this.program, 'uCameraPosition');
-    this.rotationAxisVelocityLocation = this.gl.getUniformLocation(this.program, 'uRotationAxisVelocity');
-    this.texLocation = this.gl.getUniformLocation(this.program, 'uTex');
-    this.itemCountLocation = this.gl.getUniformLocation(this.program, 'uItemCount');
-    this.atlasSizeLocation = this.gl.getUniformLocation(this.program, 'uAtlasSize');
-    this.control = new ArcballControl(canvas);
-    this.worldMatrix = mat4.create();
-    this.viewMatrix = mat4.create();
-    this.projectionMatrix = mat4.create();
-    this.cameraPosition = vec3.fromValues(0, 0, 5);
-    this._buildGeometry();
-    this._buildTextureAtlas().then(() => {
-      this._setupBuffers();
-    });
+
+    this.viewportSize = vec2.fromValues(this.canvas.clientWidth, this.canvas.clientHeight)
+
+    this.discProgram = createProgram(this.gl, [discVertShaderSource, discFragShaderSource], undefined, {
+      aModelPosition: 0,
+      aModelNormal: 1,
+      aModelUvs: 2,
+      aInstanceMatrix: 3
+    })
+
+    if (!this.discProgram) {
+      throw new Error('Failed to create shader program')
+    }
+
+    this.discLocations = {
+      aModelPosition: this.gl.getAttribLocation(this.discProgram, 'aModelPosition'),
+      aModelUvs: this.gl.getAttribLocation(this.discProgram, 'aModelUvs'),
+      aInstanceMatrix: this.gl.getAttribLocation(this.discProgram, 'aInstanceMatrix'),
+      uWorldMatrix: this.gl.getUniformLocation(this.discProgram, 'uWorldMatrix'),
+      uViewMatrix: this.gl.getUniformLocation(this.discProgram, 'uViewMatrix'),
+      uProjectionMatrix: this.gl.getUniformLocation(this.discProgram, 'uProjectionMatrix'),
+      uCameraPosition: this.gl.getUniformLocation(this.discProgram, 'uCameraPosition'),
+      uRotationAxisVelocity: this.gl.getUniformLocation(this.discProgram, 'uRotationAxisVelocity'),
+      uTex: this.gl.getUniformLocation(this.discProgram, 'uTex'),
+      uItemCount: this.gl.getUniformLocation(this.discProgram, 'uItemCount'),
+      uAtlasSize: this.gl.getUniformLocation(this.discProgram, 'uAtlasSize'),
+      uFrames: this.gl.getUniformLocation(this.discProgram, 'uFrames'),
+      uScaleFactor: this.gl.getUniformLocation(this.discProgram, 'uScaleFactor')
+    }
+
+    this.discGeo = new DiscGeometry(56, 1)
+    this.discBuffers = this.discGeo.data
+    this.discVAO = makeVertexArray(
+      this.gl,
+      [
+        [
+          makeBuffer(this.gl, this.discBuffers.vertices, this.gl.STATIC_DRAW),
+          this.discLocations.aModelPosition,
+          3
+        ],
+        [makeBuffer(this.gl, this.discBuffers.uvs, this.gl.STATIC_DRAW), this.discLocations.aModelUvs, 2]
+      ],
+      this.discBuffers.indices
+    )
+
+    this.icoGeo = new IcosahedronGeometry()
+    this.icoGeo.subdivide(1).spherize(this.SPHERE_RADIUS)
+    this.instancePositions = this.icoGeo.vertices.map(v => v.position)
+    this.DISC_INSTANCE_COUNT = this.icoGeo.vertices.length
+    this.initDiscInstances(this.DISC_INSTANCE_COUNT)
+
+    this.initTexture()
+
+    this.control = new ArcballControl(this.canvas, deltaTime => this.onControlUpdate(deltaTime))
+
+    this.updateCameraMatrix()
+    this.updateProjectionMatrix()
+    this.resize()
   }
 
-  _buildGeometry() {
-    const ico = new IcosahedronGeometry();
-    ico.subdivide(3);
-    ico.spherize(2.0);
-    this.sphereVertexCount = ico.faces.length * 3;
-    const disc = new DiscGeometry(48, 0.18 * this.scale);
-    this.instanceCount = ico.vertices.length;
-    this.sphereVertexData = ico.vertexData;
-    this.sphereNormalData = ico.normalData;
-    this.sphereUvData = ico.uvData;
-    this.sphereIndexData = ico.indexData;
-    const instanceMatrices = new Float32Array(this.instanceCount * 16);
-    for (let i = 0; i < this.instanceCount; i++) {
-      const v = ico.vertices[i].position;
-      const n = ico.vertices[i].normal;
-      const m = mat4.create();
-      mat4.translate(m, m, v);
-      const zAxis = vec3.fromValues(0, 0, 1);
-      const rotAxis = vec3.create();
-      vec3.cross(rotAxis, zAxis, n);
-      const dotVal = vec3.dot(zAxis, n);
-      const angle = Math.acos(Math.min(1, Math.max(-1, dotVal)));
-      if (vec3.length(rotAxis) > 1e-6) {
-        mat4.rotate(m, m, angle, rotAxis);
+  initTexture() {
+    if (!this.gl) return
+
+    this.tex = createAndSetupTexture(
+      this.gl,
+      this.gl.LINEAR,
+      this.gl.LINEAR,
+      this.gl.CLAMP_TO_EDGE,
+      this.gl.CLAMP_TO_EDGE
+    )
+    if (!this.tex) return
+
+    const itemCount = Math.max(1, this.items.length)
+    this.atlasSize = Math.ceil(Math.sqrt(itemCount))
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const cellSize = 512
+    canvas.width = this.atlasSize * cellSize
+    canvas.height = this.atlasSize * cellSize
+
+    Promise.all(
+      this.items.map(
+        item =>
+          new Promise(resolve => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            img.onload = () => resolve(img)
+            img.onerror = () => resolve(img)
+            img.src = item.image
+          })
+      )
+    ).then(images => {
+      images.forEach((img, i) => {
+        const x = (i % this.atlasSize) * cellSize
+        const y = Math.floor(i / this.atlasSize) * cellSize
+        try {
+          ctx.drawImage(img, x, y, cellSize, cellSize)
+        } catch (e) {
+          // Skip failed images
+        }
+      })
+
+      if (this.gl && this.tex) {
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex)
+        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, canvas)
+        this.gl.generateMipmap(this.gl.TEXTURE_2D)
       }
-      instanceMatrices.set(m, i * 16);
-    }
-    this.instanceMatrixData = instanceMatrices;
-    this.discVertexData = disc.vertexData;
-    this.discNormalData = disc.normalData;
-    this.discUvData = disc.uvData;
-    this.discIndexData = disc.indexData;
-    this.discVertexCount = disc.faces.length * 3;
+    })
   }
 
-  async _buildTextureAtlas() {
-    const gl = this.gl;
-    const count = this.items.length;
-    const atlasSide = Math.ceil(Math.sqrt(count));
-    this.atlasSize = atlasSide;
-    const cellSize = 512;
-    const canvas = document.createElement('canvas');
-    canvas.width = atlasSide * cellSize;
-    canvas.height = atlasSide * cellSize;
-    const ctx = canvas.getContext('2d');
-    const promises = this.items.map((item, i) => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          const cellX = (i % atlasSide) * cellSize;
-          const cellY = Math.floor(i / atlasSide) * cellSize;
-          const aspect = img.width / img.height;
-          let dw, dh, dx, dy;
-          if (aspect > 1) {
-            dh = cellSize;
-            dw = cellSize * aspect;
-            dx = cellX + (cellSize - dw) / 2;
-            dy = cellY;
-          } else {
-            dw = cellSize;
-            dh = cellSize / aspect;
-            dx = cellX;
-            dy = cellY + (cellSize - dh) / 2;
-          }
-          ctx.drawImage(img, dx, dy, dw, dh);
-          resolve();
-        };
-        img.onerror = () => resolve();
-        img.src = item.image;
-      });
-    });
-    await Promise.all(promises);
-    this.texture = createAndSetupTexture(gl);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
-    gl.generateMipmap(gl.TEXTURE_2D);
+  initDiscInstances(count) {
+    if (!this.gl) return
+
+    this.discInstances = {
+      matricesArray: new Float32Array(count * 16),
+      matrices: [],
+      buffer: this.gl.createBuffer()
+    }
+
+    for (let i = 0; i < count; ++i) {
+      const instanceMatrixArray = new Float32Array(this.discInstances.matricesArray.buffer, i * 16 * 4, 16)
+      instanceMatrixArray.set(mat4.create())
+      this.discInstances.matrices.push(instanceMatrixArray)
+    }
+
+    this.gl.bindVertexArray(this.discVAO)
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.discInstances.buffer)
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.discInstances.matricesArray.byteLength, this.gl.DYNAMIC_DRAW)
+
+    const mat4AttribSlotCount = 4
+    const bytesPerMatrix = 16 * 4
+    for (let j = 0; j < mat4AttribSlotCount; ++j) {
+      const loc = this.discLocations.aInstanceMatrix + j
+      this.gl.enableVertexAttribArray(loc)
+      this.gl.vertexAttribPointer(loc, 4, this.gl.FLOAT, false, bytesPerMatrix, j * 4 * 4)
+      this.gl.vertexAttribDivisor(loc, 1)
+    }
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null)
+    this.gl.bindVertexArray(null)
   }
 
-  _setupBuffers() {
-    const gl = this.gl;
-    this.sphereVao = gl.createVertexArray();
-    gl.bindVertexArray(this.sphereVao);
-    const spherePosBuf = makeBuffer(gl, this.sphereVertexData);
-    const sphereNormBuf = makeBuffer(gl, this.sphereNormalData);
-    const sphereUvBuf = makeBuffer(gl, this.sphereUvData);
-    const sphereIdxBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, sphereIdxBuf);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.sphereIndexData, gl.STATIC_DRAW);
-    let loc;
-    loc = gl.getAttribLocation(this.program, 'aModelPosition');
-    if (loc !== -1) { gl.bindBuffer(gl.ARRAY_BUFFER, spherePosBuf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0); }
-    loc = gl.getAttribLocation(this.program, 'aModelNormal');
-    if (loc !== -1) { gl.bindBuffer(gl.ARRAY_BUFFER, sphereNormBuf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0); }
-    loc = gl.getAttribLocation(this.program, 'aModelUvs');
-    if (loc !== -1) { gl.bindBuffer(gl.ARRAY_BUFFER, sphereUvBuf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0); }
-    const instBuf = makeBuffer(gl, this.instanceMatrixData, gl.DYNAMIC_DRAW);
-    const matLoc0 = gl.getAttribLocation(this.program, 'aInstanceMatrix');
-    if (matLoc0 !== -1) {
-      for (let i = 0; i < 4; i++) {
-        const matLoc = matLoc0 + i;
-        gl.bindBuffer(gl.ARRAY_BUFFER, instBuf);
-        gl.enableVertexAttribArray(matLoc);
-        gl.vertexAttribPointer(matLoc, 4, gl.FLOAT, false, 64, i * 16);
-        gl.vertexAttribDivisor(matLoc, 1);
-      }
-    }
-    gl.bindVertexArray(null);
-    this.spherePosBuf = spherePosBuf;
-    this.sphereNormBuf = sphereNormBuf;
-    this.sphereUvBuf = sphereUvBuf;
-    this.sphereIdxBuf = sphereIdxBuf;
-    this.instBuf = instBuf;
+  run(time = 0) {
+    this.deltaTime = Math.min(32, time - this.time)
+    this.time = time
+    this.deltaFrames = this.deltaTime / this.TARGET_FRAME_DURATION
+    this.frames += this.deltaFrames
+
+    this.animate()
+    this.render()
+
+    this._rafId = requestAnimationFrame(t => this.run(t))
   }
 
-  updateInstanceMatrices() {
-    const gl = this.gl;
-    const rotMat = this.control.getMatrix();
-    const newInstanceData = new Float32Array(this.instanceCount * 16);
-    for (let i = 0; i < this.instanceCount; i++) {
-      const origMat = mat4.create();
-      mat4.copy(origMat, this.instanceMatrixData.subarray(i * 16, i * 16 + 16));
-      const result = mat4.create();
-      mat4.multiply(result, rotMat, origMat);
-      newInstanceData.set(result, i * 16);
+  resize() {
+    this.viewportSize = vec2.set(this.viewportSize || vec2.create(), this.canvas.clientWidth, this.canvas.clientHeight)
+
+    if (!this.gl) return
+
+    const needsResize = resizeCanvasToDisplaySize(this.canvas)
+    if (needsResize) {
+      this.gl.viewport(0, 0, this.gl.drawingBufferWidth, this.gl.drawingBufferHeight)
     }
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, newInstanceData);
+
+    this.updateProjectionMatrix()
+  }
+
+  animate() {
+    if (!this.gl) return
+
+    this.control.update(this.deltaTime, this.TARGET_FRAME_DURATION)
+
+    const positions = this.instancePositions.map(p => vec3.transformQuat(vec3.create(), p, this.control.orientation))
+    const scale = 0.25
+    const SCALE_INTENSITY = 0.6
+
+    positions.forEach((p, ndx) => {
+      const s = (Math.abs(p[2]) / this.SPHERE_RADIUS) * SCALE_INTENSITY + (1 - SCALE_INTENSITY)
+      const finalScale = s * scale
+      const matrix = mat4.create()
+      mat4.multiply(matrix, matrix, mat4.fromTranslation(mat4.create(), vec3.negate(vec3.create(), p)))
+      mat4.multiply(matrix, matrix, mat4.targetTo(mat4.create(), [0, 0, 0], p, [0, 1, 0]))
+      mat4.multiply(matrix, matrix, mat4.fromScaling(mat4.create(), [finalScale, finalScale, finalScale]))
+      mat4.multiply(matrix, matrix, mat4.fromTranslation(mat4.create(), [0, 0, -this.SPHERE_RADIUS]))
+
+      mat4.copy(this.discInstances.matrices[ndx], matrix)
+    })
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.discInstances.buffer)
+    this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, this.discInstances.matricesArray)
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null)
+
+    this.smoothRotationVelocity = this.control.rotationVelocity
   }
 
   render() {
-    const gl = this.gl;
-    if (!this.program) return;
-    resizeCanvasToDisplaySize(this.canvas);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.useProgram(this.program);
-    const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    mat4.perspective(this.projectionMatrix, Math.PI / 4, aspect, 0.1, 100);
-    mat4.lookAt(this.viewMatrix, this.cameraPosition, vec3.fromValues(0, 0, 0), vec3.fromValues(0, 1, 0));
-    mat4.identity(this.worldMatrix);
-    this.control.update();
-    this.updateInstanceMatrices();
-    gl.uniformMatrix4fv(this.worldMatrixLocation, false, this.worldMatrix);
-    gl.uniformMatrix4fv(this.viewMatrixLocation, false, this.viewMatrix);
-    gl.uniformMatrix4fv(this.projectionMatrixLocation, false, this.projectionMatrix);
-    gl.uniform3fv(this.cameraPositionLocation, this.cameraPosition);
-    const rotAxis = this.control.rotationAxis;
-    const rotVel = this.control.rotationVelocity;
-    gl.uniform4f(this.rotationAxisVelocityLocation, rotAxis[0], rotAxis[1], rotAxis[2], rotVel);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.uniform1i(this.texLocation, 0);
-    gl.uniform1i(this.itemCountLocation, this.items.length);
-    gl.uniform1i(this.atlasSizeLocation, this.atlasSize);
-    gl.bindVertexArray(this.sphereVao);
-    gl.drawElementsInstanced(gl.TRIANGLES, this.sphereVertexCount, gl.UNSIGNED_SHORT, 0, this.instanceCount);
-    gl.bindVertexArray(null);
+    if (!this.gl) return
+
+    this.gl.useProgram(this.discProgram)
+
+    this.gl.enable(this.gl.CULL_FACE)
+    this.gl.enable(this.gl.DEPTH_TEST)
+    this.gl.enable(this.gl.BLEND)
+    this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA)
+
+    this.gl.clearColor(0, 0, 0, 0)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT)
+
+    this.gl.uniformMatrix4fv(this.discLocations.uWorldMatrix, false, this.worldMatrix)
+    this.gl.uniformMatrix4fv(this.discLocations.uViewMatrix, false, this.camera.matrices.view)
+    this.gl.uniformMatrix4fv(this.discLocations.uProjectionMatrix, false, this.camera.matrices.projection)
+    this.gl.uniform3f(
+      this.discLocations.uCameraPosition,
+      this.camera.position[0],
+      this.camera.position[1],
+      this.camera.position[2]
+    )
+    this.gl.uniform4f(
+      this.discLocations.uRotationAxisVelocity,
+      this.control.rotationAxis[0],
+      this.control.rotationAxis[1],
+      this.control.rotationAxis[2],
+      this.smoothRotationVelocity * 1.1
+    )
+
+    const itemCountLocation = this.discLocations.uItemCount
+    if (itemCountLocation !== null) {
+      this.gl.uniform1i(itemCountLocation, this.items.length)
+    }
+
+    const atlasSizeLocation = this.discLocations.uAtlasSize
+    if (atlasSizeLocation !== null) {
+      this.gl.uniform1i(atlasSizeLocation, this.atlasSize)
+    }
+
+    const framesLocation = this.discLocations.uFrames
+    if (framesLocation !== null) {
+      this.gl.uniform1f(framesLocation, this.frames)
+    }
+
+    const scaleFactorLocation = this.discLocations.uScaleFactor
+    if (scaleFactorLocation !== null) {
+      this.gl.uniform1f(scaleFactorLocation, this.scaleFactor)
+    }
+
+    const textureLocation = this.discLocations.uTex
+    if (textureLocation !== null) {
+      this.gl.uniform1i(textureLocation, 0)
+    }
+    this.gl.activeTexture(this.gl.TEXTURE0)
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex)
+
+    this.gl.bindVertexArray(this.discVAO)
+    this.gl.drawElementsInstanced(
+      this.gl.TRIANGLES,
+      this.discBuffers.indices.length,
+      this.gl.UNSIGNED_SHORT,
+      0,
+      this.DISC_INSTANCE_COUNT
+    )
   }
 
-  getActiveItem(normalizedX, normalizedY) {
-    return null;
+  updateCameraMatrix() {
+    mat4.targetTo(this.camera.matrix, this.camera.position, [0, 0, 0], this.camera.up)
+    mat4.invert(this.camera.matrices.view, this.camera.matrix)
+  }
+
+  updateProjectionMatrix() {
+    if (!this.gl) return
+
+    this.camera.aspect = this.gl.canvas.width / this.gl.canvas.height
+    const height = this.SPHERE_RADIUS * 0.35
+    const distance = this.camera.position[2]
+    if (this.camera.aspect > 1) {
+      this.camera.fov = 2 * Math.atan(height / distance)
+    } else {
+      this.camera.fov = 2 * Math.atan(height / this.camera.aspect / distance)
+    }
+    mat4.perspective(
+      this.camera.matrices.projection,
+      this.camera.fov,
+      this.camera.aspect,
+      this.camera.near,
+      this.camera.far
+    )
+    mat4.invert(this.camera.matrices.inversProjection, this.camera.matrices.projection)
+  }
+
+  onControlUpdate(deltaTime) {
+    const timeScale = deltaTime / this.TARGET_FRAME_DURATION + 0.0001
+    let damping = 5 / timeScale
+    let cameraTargetZ = 3
+
+    const isMoving = this.control.isPointerDown || Math.abs(this.smoothRotationVelocity) > 0.01
+
+    if (isMoving !== this.movementActive) {
+      this.movementActive = isMoving
+      this.onMovementChange(isMoving)
+    }
+
+    if (!this.control.isPointerDown) {
+      const nearestVertexIndex = this.findNearestVertexIndex()
+      const itemIndex = nearestVertexIndex % Math.max(1, this.items.length)
+      this.onActiveItemChange(itemIndex)
+      const snapDirection = vec3.normalize(vec3.create(), this.getVertexWorldPosition(nearestVertexIndex))
+      this.control.snapTargetDirection = snapDirection
+    } else {
+      cameraTargetZ += this.control.rotationVelocity * 80 + 2.5
+      damping = 7 / timeScale
+    }
+
+    this.camera.position[2] += (cameraTargetZ - this.camera.position[2]) / damping
+    this.updateCameraMatrix()
+  }
+
+  findNearestVertexIndex() {
+    const n = this.control.snapDirection
+    const inversOrientation = quat.conjugate(quat.create(), this.control.orientation)
+    const nt = vec3.transformQuat(vec3.create(), n, inversOrientation)
+
+    let maxD = -1
+    let nearestVertexIndex = 0
+    for (let i = 0; i < this.instancePositions.length; ++i) {
+      const d = vec3.dot(nt, this.instancePositions[i])
+      if (d > maxD) {
+        maxD = d
+        nearestVertexIndex = i
+      }
+    }
+    return nearestVertexIndex
+  }
+
+  getVertexWorldPosition(index) {
+    const nearestVertexPos = this.instancePositions[index]
+    return vec3.transformQuat(vec3.create(), nearestVertexPos, this.control.orientation)
   }
 
   destroy() {
-    if (this.control) {
-      this.control.destroy();
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId)
+      this._rafId = null
     }
   }
 }
 
-// ─── Button handler ─────────────────────────────────────────────────────────
-function handleButtonClick() {
-  if (activeItem.value?.link) {
-    window.open(activeItem.value.link, '_blank');
-  }
+// ─── Event handlers ──────────────────────────────────────────────────────────
+const handleActiveItem = (index) => {
+  const items = resolvedItems.value
+  if (!items.length) return
+  const itemIndex = index % items.length
+  activeItem.value = items[itemIndex]
 }
 
-// ─── Lifecycle ──────────────────────────────────────────────────────────────
+const handleButtonClick = () => {
+  if (!activeItem.value?.link) return
+  emit('click', activeItem.value)
+}
+
+// ─── Lifecycle ───────────────────────────────────────────────────────────────
 onMounted(() => {
-  if (!canvasRef.value) return;
-  infiniteMenu = new InfiniteGridMenu(canvasRef.value, resolvedItems.value, props.scale);
+  if (!canvasRef.value) return
 
-  function animate() {
-    if (infiniteMenu) {
-      infiniteMenu.render();
+  try {
+    infiniteMenu = new InfiniteGridMenu(
+      canvasRef.value,
+      resolvedItems.value,
+      handleActiveItem,
+      moving => {
+        isMoving.value = moving
+      },
+      menu => menu.run()
+    )
+
+    const handleResize = () => {
+      infiniteMenu?.resize()
     }
-    animationId = requestAnimationFrame(animate);
-  }
-  animate();
-});
 
-onBeforeUnmount(() => {
-  if (animationId !== null) {
-    cancelAnimationFrame(animationId);
-  }
-  if (infiniteMenu) {
-    infiniteMenu.destroy();
-  }
-});
+    window.addEventListener('resize', handleResize)
+    handleResize()
 
-watch(resolvedItems, (newItems) => {
-  if (infiniteMenu) {
-    infiniteMenu.destroy();
+    onBeforeUnmount(() => {
+      window.removeEventListener('resize', handleResize)
+      infiniteMenu?.destroy()
+    })
+  } catch (error) {
+    console.error('Failed to initialize InfiniteMenu:', error)
   }
-  if (canvasRef.value) {
-    infiniteMenu = new InfiniteGridMenu(canvasRef.value, newItems, props.scale);
-  }
-});
+})
 
-watch(() => props.scale, (newScale) => {
-  if (infiniteMenu) {
-    infiniteMenu.destroy();
+watch(
+  () => props.items,
+  () => {
+    if (infiniteMenu && canvasRef.value) {
+      infiniteMenu.destroy()
+      infiniteMenu = new InfiniteGridMenu(
+        canvasRef.value,
+        resolvedItems.value,
+        handleActiveItem,
+        moving => {
+          isMoving.value = moving
+        },
+        menu => menu.run()
+      )
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.scale,
+  () => {
+    if (infiniteMenu && canvasRef.value) {
+      infiniteMenu.destroy()
+      infiniteMenu = new InfiniteGridMenu(
+        canvasRef.value,
+        resolvedItems.value,
+        handleActiveItem,
+        moving => {
+          isMoving.value = moving
+        },
+        menu => menu.run(),
+        props.scale
+      )
+    }
   }
-  if (canvasRef.value) {
-    infiniteMenu = new InfiniteGridMenu(canvasRef.value, resolvedItems.value, newScale);
-  }
-});
+)
 </script>
 
 <template>
-  <div class="infinite-menu-container">
-    <canvas ref="canvasRef" class="infinite-menu-canvas" />
+  <div class="im-container">
+    <canvas ref="canvasRef" class="im-canvas" />
 
     <template v-if="activeItem">
-      <h2 class="infinite-menu-title" :class="{ hidden: isMoving }">
+      <h2
+        :class="['im-title', isMoving ? 'im-hidden' : 'im-visible']"
+      >
         {{ activeItem.title }}
       </h2>
-      <p class="infinite-menu-desc" :class="{ hidden: isMoving }">
-        {{ activeItem.description }}
-      </p>
+
       <div
         v-if="activeItem.link"
         @click="handleButtonClick"
-        class="infinite-menu-button"
-        :class="{ hidden: isMoving }"
+        :class="['im-btn', isMoving ? 'im-hidden' : 'im-visible']"
       >
-        <span>View Project</span>
+        <span>&#x2197;</span>
       </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.infinite-menu-container {
+.im-container {
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 500px;
 }
 
-.infinite-menu-canvas {
+.im-canvas {
   outline: none;
   width: 100%;
   height: 100%;
   overflow: hidden;
   cursor: grab;
+  display: block;
 }
 
-.infinite-menu-canvas:active {
+.im-canvas:active {
   cursor: grabbing;
 }
 
-.infinite-menu-title {
+.im-title {
   position: absolute;
   left: 1.6em;
   top: 50%;
   transform: translate(20%, -50%);
   color: white;
-  font-size: 3rem;
+  font-size: 3.5rem;
   font-weight: 900;
   user-select: none;
-  transition: opacity 0.5s;
   pointer-events: none;
 }
 
-.infinite-menu-desc {
+.im-desc {
   position: absolute;
   right: 1%;
   top: 50%;
@@ -828,30 +1089,39 @@ watch(() => props.scale, (newScale) => {
   font-size: 1.25rem;
   max-width: 10ch;
   user-select: none;
-  transition: opacity 0.5s;
   pointer-events: none;
 }
 
-.infinite-menu-button {
+.im-btn {
   position: absolute;
   left: 50%;
   bottom: 2em;
   transform: translateX(-50%);
+  width: 60px;
+  height: 60px;
   background: #9333ea;
   color: white;
-  padding: 0.75em 2em;
-  border-radius: 9999px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  font-weight: 600;
-  transition: opacity 0.5s;
+  font-size: 1.5rem;
+  border: 4px solid black;
 }
 
-.infinite-menu-button:hover {
+.im-btn:hover {
   background: #7c3aed;
 }
 
-.hidden {
+.im-visible {
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
+  pointer-events: auto;
+}
+
+.im-hidden {
   opacity: 0;
+  transition: opacity 0.1s ease-in-out;
   pointer-events: none;
 }
 </style>

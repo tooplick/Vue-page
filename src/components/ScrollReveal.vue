@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, watch, useTemplateRef } from 'vue'
+import { computed, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
@@ -12,13 +12,11 @@ const props = defineProps({
   baseRotation: { type: Number, default: 3 },
   blurStrength: { type: Number, default: 4 },
   containerClassName: { type: String, default: '' },
-  textClassName: { type: String, default: '' },
-  rotationEnd: { type: String, default: 'bottom bottom' },
-  wordAnimationEnd: { type: String, default: 'bottom bottom' }
+  textClassName: { type: String, default: '' }
 })
 
 const containerRef = useTemplateRef('containerRef')
-let scrollTriggerInstances = []
+let ctx = null
 
 const splitText = computed(() => {
   const text = typeof props.children === 'string' ? props.children : ''
@@ -29,90 +27,57 @@ const splitText = computed(() => {
   }))
 })
 
-const initializeAnimation = () => {
+onMounted(async () => {
+  await nextTick()
   const el = containerRef.value
   if (!el) return
 
-  scrollTriggerInstances.forEach(trigger => trigger.kill())
-  scrollTriggerInstances = []
+  ctx = gsap.context(() => {
+    const wordElements = el.querySelectorAll('.word')
+    if (!wordElements.length) return
 
-  const rotationTl = gsap.fromTo(
-    el,
-    { transformOrigin: '0% 50%', rotate: props.baseRotation },
-    {
-      ease: 'none',
-      rotate: 0,
-      scrollTrigger: {
-        trigger: el,
-        start: 'top bottom',
-        end: props.rotationEnd,
-        scrub: true
-      }
+    gsap.set(el, { transformOrigin: '0% 50%', rotate: props.baseRotation })
+    gsap.set(wordElements, { opacity: props.baseOpacity, willChange: 'opacity' })
+    if (props.enableBlur) {
+      gsap.set(wordElements, { filter: `blur(${props.blurStrength}px)` })
     }
-  )
 
-  if (rotationTl.scrollTrigger) {
-    scrollTriggerInstances.push(rotationTl.scrollTrigger)
-  }
+    ScrollTrigger.create({
+      trigger: el,
+      start: 'top 80%',
+      once: true,
+      onEnter: () => {
+        gsap.to(el, {
+          rotate: 0,
+          duration: 1,
+          ease: 'power2.out'
+        })
 
-  const wordElements = el.querySelectorAll('.word')
+        gsap.to(wordElements, {
+          opacity: 1,
+          stagger: 0.05,
+          duration: 0.8,
+          ease: 'power2.out'
+        })
 
-  const opacityTl = gsap.fromTo(
-    wordElements,
-    { opacity: props.baseOpacity, willChange: 'opacity' },
-    {
-      ease: 'none',
-      opacity: 1,
-      stagger: 0.05,
-      scrollTrigger: {
-        trigger: el,
-        start: 'top bottom-=20%',
-        end: props.wordAnimationEnd,
-        scrub: true
-      }
-    }
-  )
-
-  if (opacityTl.scrollTrigger) {
-    scrollTriggerInstances.push(opacityTl.scrollTrigger)
-  }
-
-  if (props.enableBlur) {
-    const blurTl = gsap.fromTo(
-      wordElements,
-      { filter: `blur(${props.blurStrength}px)` },
-      {
-        ease: 'none',
-        filter: 'blur(0px)',
-        stagger: 0.05,
-        scrollTrigger: {
-          trigger: el,
-          start: 'top bottom-=20%',
-          end: props.wordAnimationEnd,
-          scrub: true
+        if (props.enableBlur) {
+          gsap.to(wordElements, {
+            filter: 'blur(0px)',
+            stagger: 0.05,
+            duration: 0.8,
+            ease: 'power2.out'
+          })
         }
       }
-    )
+    })
 
-    if (blurTl.scrollTrigger) {
-      scrollTriggerInstances.push(blurTl.scrollTrigger)
-    }
-  }
-}
-
-onMounted(() => {
-  initializeAnimation()
+    ScrollTrigger.refresh()
+  }, el)
 })
 
 onUnmounted(() => {
-  scrollTriggerInstances.forEach(trigger => trigger.kill())
+  ctx && ctx.revert()
 })
-
-watch(
-  [() => props.children, () => props.enableBlur, () => props.baseRotation, () => props.baseOpacity, () => props.rotationEnd, () => props.wordAnimationEnd, () => props.blurStrength],
-  () => { initializeAnimation() },
-  { deep: true }
-)
 </script>
 
 <template>

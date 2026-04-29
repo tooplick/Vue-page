@@ -1,96 +1,81 @@
 <script setup>
-import { onMounted, onUnmounted, watch, useTemplateRef } from 'vue'
-import { gsap } from 'gsap'
-import { SplitText } from 'gsap/SplitText'
-import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin'
-
-gsap.registerPlugin(SplitText, ScrambleTextPlugin)
+import { ref, onMounted, onUnmounted, useTemplateRef } from 'vue'
 
 const props = defineProps({
   radius: { type: Number, default: 100 },
-  duration: { type: Number, default: 1.2 },
-  speed: { type: Number, default: 0.5 },
-  scrambleChars: { type: String, default: '.:' },
-  className: { type: String, default: '' },
-  style: { type: Object, default: () => ({}) }
+  duration: { type: Number, default: 600 },
+  scrambleChars: { type: String, default: '.:!@#$%^&*()_+-=' },
+  className: { type: String, default: '' }
 })
 
 const rootRef = useTemplateRef('rootRef')
-
-let splitText = null
+const displayText = ref('')
+const originalText = ref('')
 let handleMove = null
 
-const initializeScrambleText = () => {
-  if (!rootRef.value) return
-
-  const pElement = rootRef.value.querySelector('p')
-  if (!pElement) return
-
-  splitText = new SplitText(pElement, {
-    type: 'chars',
-    charsClass: 'inline-block will-change-transform'
-  })
-
-  splitText.chars.forEach(el => {
-    const c = el
-    gsap.set(c, { attr: { 'data-content': c.innerHTML } })
-  })
-
-  handleMove = (e) => {
-    if (!splitText) return
-
-    splitText.chars.forEach(el => {
-      const c = el
-      const { left, top, width, height } = c.getBoundingClientRect()
-      const dx = e.clientX - (left + width / 2)
-      const dy = e.clientY - (top + height / 2)
-      const dist = Math.hypot(dx, dy)
-
-      if (dist < props.radius) {
-        gsap.to(c, {
-          overwrite: true,
-          duration: props.duration * (1 - dist / props.radius),
-          scrambleText: {
-            text: c.dataset.content || '',
-            chars: props.scrambleChars,
-            speed: props.speed
-          },
-          ease: 'none'
-        })
-      }
-    })
-  }
-
-  rootRef.value.addEventListener('pointermove', handleMove)
-}
-
-const cleanup = () => {
-  if (rootRef.value && handleMove) {
-    rootRef.value.removeEventListener('pointermove', handleMove)
-  }
-  if (splitText) {
-    splitText.revert()
-    splitText = null
-  }
-  handleMove = null
+const scramble = (char) => {
+  const chars = props.scrambleChars
+  return chars[Math.floor(Math.random() * chars.length)]
 }
 
 onMounted(() => {
-  initializeScrambleText()
+  const el = rootRef.value
+  if (!el) return
+  const slot = el.querySelector('.scramble-inner')
+  if (!slot) return
+
+  originalText.value = slot.textContent
+  displayText.value = originalText.value
+
+  const charPositions = []
+
+  handleMove = (e) => {
+    const rect = el.getBoundingClientRect()
+    const chars = originalText.value.split('')
+    let result = ''
+
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === ' ') {
+        result += ' '
+        continue
+      }
+
+      // Approximate char position
+      const charX = rect.left + (i / chars.length) * rect.width
+      const charY = rect.top + rect.height / 2
+      const dx = e.clientX - charX
+      const dy = e.clientY - charY
+      const dist = Math.hypot(dx, dy)
+
+      if (dist < props.radius) {
+        result += scramble(chars[i])
+      } else {
+        result += chars[i]
+      }
+    }
+
+    slot.textContent = result
+
+    // Restore after delay
+    clearTimeout(slot._restoreTimer)
+    slot._restoreTimer = setTimeout(() => {
+      slot.textContent = originalText.value
+    }, props.duration)
+  }
+
+  el.addEventListener('pointermove', handleMove)
 })
 
 onUnmounted(() => {
-  cleanup()
-})
-
-watch([() => props.radius, () => props.duration, () => props.speed, () => props.scrambleChars], () => {
-  cleanup()
-  initializeScrambleText()
+  const el = rootRef.value
+  if (el && handleMove) {
+    el.removeEventListener('pointermove', handleMove)
+  }
 })
 </script>
 
 <template>
-  <div ref="rootRef" :class="`scramble-text ${className}`" :style="style">
-    <p><slot></slot></p>
+  <div ref="rootRef" :class="`scramble-text ${className}`" style="cursor: default; user-select: none;">
+    <span class="scramble-inner"><slot /></span>
   </div>
 </template>
