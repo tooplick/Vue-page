@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ScrambleText from '../components/ScrambleText.vue'
 import ScrollReveal from '../components/ScrollReveal.vue'
@@ -11,6 +11,29 @@ const route = useRoute()
 const project = computed(() => {
   return projects.find(p => p.id === route.params.id)
 })
+
+const stars = ref(0)
+
+async function fetchStars(link) {
+  if (!link) return
+  try {
+    const parts = link.replace('https://github.com/', '').split('/')
+    if (parts.length < 2) return
+    const res = await fetch(`https://api.github.com/repos/${parts[0]}/${parts[1]}`)
+    if (!res.ok) return
+    const data = await res.json()
+    stars.value = data.stargazers_count
+  } catch {
+    // fallback to static value
+  }
+}
+
+watch(project, (p) => {
+  if (p) {
+    stars.value = p.stars || 0
+    fetchStars(p.link)
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -37,7 +60,7 @@ const project = computed(() => {
           <div class="stars-label">GitHub Stars</div>
           <div class="stars-number">
             <CountUp
-              :to="project.stars"
+              :to="stars"
               :duration="2"
               :delay="0.3"
               separator=","

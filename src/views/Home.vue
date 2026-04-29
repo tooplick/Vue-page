@@ -1,23 +1,25 @@
 <script setup>
 import SplitText from '../components/SplitText.vue'
 import ScrollFloat from '../components/ScrollFloat.vue'
-import ScrollReveal from '../components/ScrollReveal.vue'
+import BlurText from '../components/BlurText.vue'
 </script>
 
 <template>
   <div class="home">
     <!-- Hero -->
-    <section class="hero">
-      <SplitText
-        text="TOOPLICK"
-        tag="h1"
-        :delay="80"
-        :duration="1"
-        ease="power3.out"
-        text-align="center"
-        class-name="hero-title"
-      />
-      <p class="hero-sub">Developer & Open Source Contributor</p>
+    <section class="section hero">
+      <div class="hero-content">
+        <SplitText
+          text="TOOPLICK"
+          tag="h1"
+          :delay="80"
+          :duration="1"
+          ease="power3.out"
+          text-align="center"
+          class-name="hero-title"
+        />
+        <p class="hero-sub">Developer & Open Source Contributor</p>
+      </div>
       <div class="scroll-hint">
         <div class="scroll-arrow">&#8595;</div>
         <span>Scroll</span>
@@ -25,7 +27,7 @@ import ScrollReveal from '../components/ScrollReveal.vue'
     </section>
 
     <!-- ScrollFloat -->
-    <section class="section section-float">
+    <section class="section">
       <ScrollFloat
         children="Building the Future"
         container-class-name="float-wrap"
@@ -36,23 +38,31 @@ import ScrollReveal from '../components/ScrollReveal.vue'
       />
     </section>
 
-    <!-- ScrollReveal -->
-    <section class="section section-reveal">
-      <ScrollReveal
-        children="I build tools, contribute to open source, and explore the intersection of AI and web technology."
-        :enable-blur="true"
-        :base-opacity="0.1"
-        :base-rotation="3"
-        :blur-strength="4"
-        container-class-name="reveal-wrap"
-        text-class-name="reveal-text"
-      />
+    <!-- BlurText -->
+    <section class="section">
+      <div class="reveal-wrap">
+        <BlurText
+          text="I build tools, contribute to open source, and explore the intersection of AI and web technology."
+          :delay="80"
+          animate-by="words"
+          direction="top"
+          class-name="reveal-text"
+        />
+      </div>
     </section>
 
     <!-- CTA -->
     <section class="section section-cta">
       <div class="cta-box">
-        <h2 class="cta-heading">Explore My Work</h2>
+        <SplitText
+          text="Explore My Work"
+          tag="h2"
+          :delay="60"
+          :duration="1"
+          ease="power3.out"
+          text-align="center"
+          class-name="cta-heading"
+        />
         <p class="cta-desc">Check out the projects I've been working on</p>
         <router-link to="/projects" class="cta-btn">View Projects</router-link>
       </div>
@@ -65,16 +75,22 @@ import ScrollReveal from '../components/ScrollReveal.vue'
   min-height: 100vh;
 }
 
-/* Hero */
-.hero {
+.section {
   height: 100vh;
+  scroll-snap-align: start;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2rem;
   text-align: center;
   position: relative;
+}
+
+/* Hero */
+.hero-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .hero-title {
@@ -108,15 +124,7 @@ import ScrollReveal from '../components/ScrollReveal.vue'
   50% { transform: translateY(8px); }
 }
 
-/* Sections */
-.section {
-  min-height: 70vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem 2rem;
-}
-
+/* Float */
 .float-wrap { text-align: center; }
 .float-text {
   font-size: clamp(1.2rem, 4vw, 2.5rem) !important;
@@ -124,6 +132,7 @@ import ScrollReveal from '../components/ScrollReveal.vue'
   opacity: 0.8;
 }
 
+/* BlurText reveal */
 .reveal-wrap { max-width: 650px; text-align: center; }
 .reveal-text {
   font-size: clamp(1rem, 2.5vw, 1.3rem) !important;
@@ -133,11 +142,10 @@ import ScrollReveal from '../components/ScrollReveal.vue'
 }
 
 /* CTA */
-.section-cta { min-height: 50vh; }
 .cta-box { text-align: center; }
 .cta-heading {
-  font-size: clamp(1.5rem, 4vw, 2.5rem);
-  font-weight: 300;
+  font-size: clamp(1.5rem, 4vw, 2.5rem) !important;
+  font-weight: 300 !important;
   letter-spacing: 0.1em;
   margin-bottom: 1rem;
 }

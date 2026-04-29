@@ -4,12 +4,37 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-width: none;
+  scroll-snap-type: y mandatory;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   background: #0a0a0a;
   color: #ffffff;
   font-family: system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  scrollbar-width: none;
+}
+
+#app::-webkit-scrollbar {
+  display: none;
 }
 
 #app {
