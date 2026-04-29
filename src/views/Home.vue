@@ -10,7 +10,7 @@ import BlurText from '../components/BlurText.vue'
     <section class="section hero">
       <div class="hero-content">
         <SplitText
-          text="TOOPLICK"
+          text="Tooplick"
           tag="h1"
           :delay="80"
           :duration="1"
@@ -18,7 +18,13 @@ import BlurText from '../components/BlurText.vue'
           text-align="center"
           class-name="hero-title"
         />
-        <p class="hero-sub">Developer & Open Source Contributor</p>
+        <BlurText
+          text="Developer & Open Source Contributor"
+          :delay="150"
+          animate-by="words"
+          direction="top"
+          class-name="hero-sub"
+        />
       </div>
       <div class="scroll-hint">
         <div class="scroll-arrow">&#8595;</div>
