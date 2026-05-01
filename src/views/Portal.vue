@@ -5,13 +5,13 @@ import PixelCard from '../components/PixelCard.vue'
 
 const portalLinks = [
   { category: 'Web', links: [
-    { label: 'YGKing.top', href: 'https://ygking.top/' },
-    { label: 'OpenAI API', href: 'https://openai.ygking.top/' },
+    { label: 'Blog', href: 'https://ygking.top/' },
+    { label: 'New API', href: 'https://openai.ygking.top/' },
     { label: 'QQ Music API', href: 'https://api.ygking.top/' },
     { label: 'API Doc', href: 'https://doc.ygking.top/' },
     { label: 'Music Web', href: 'https://music.ygking.top/' },
     { label: 'Player', href: 'https://player.ygking.top/' },
-    { label: 'DouYin Video', href: 'https://dy.ygking.top/' },
+    { label: 'Video', href: 'https://dy.ygking.top/' },
     { label: 'For You', href: 'http://say.ygking.top' },
   ]},
   { category: 'Proxy', links: [
@@ -22,7 +22,6 @@ const portalLinks = [
   ]},
   { category: 'GitHub', links: [
     { label: 'tooplick', href: 'https://github.com/tooplick' },
-    { label: 'GitHub Pages', href: 'https://tooplick.github.io/' },
   ]},
 ]
 

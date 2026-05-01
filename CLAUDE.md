@@ -22,7 +22,7 @@ Personal portfolio site for "TOOPLICK" built with Vue 3 + Vite. No TypeScript �
 - `/` — Home with CSS scroll-snap (4 sections, each 100vh): SplitText hero, BlurText, BlurText, CTA
 - `/projects` — Full-screen WebGL 2 icosahedron sphere menu (InfiniteMenu) with fade-in entrance
 - `/projects/:id` — Project detail (two screens with scroll-snap): first screen has SplitText title, CountUp stars, BlurText description; second screen has contributions list (if any)
-- `/portal` — Portal links in a PixelCard with pixel hover animation (blue variant)
+- `/portal` — Portal links in a PixelCard with pixel hover animation (blue variant). Title uses BlurText, category labels and links use `motion-v` Motion component with blur-in keyframes
 - `/about` — Redirects to `/portal`
 - `/:pathMatch(.*)*` — 404 (GlitchText)
 
