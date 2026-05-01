@@ -61,7 +61,7 @@ const getDelay = (gi) => {
             class="link-group"
           >
             <Motion
-              tag="h2"
+              as="h2"
               class="section-label"
               :initial="blurFrom"
               :animate="labelKeyframes"
@@ -70,7 +70,7 @@ const getDelay = (gi) => {
             <div class="link-items">
               <Motion
                 v-for="(link, li) in group.links"
-                tag="a"
+                as="a"
                 :key="link.label"
                 :href="link.href"
                 target="_blank"
