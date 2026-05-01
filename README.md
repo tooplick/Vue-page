@@ -8,21 +8,21 @@
 
 ## 技术栈
 
-| 类别 | 技术 | 版本 | 用途 |
-|------|------|------|------|
-| 框架 | Vue 3 | ^3.5.32 | 响应式 UI，`<script setup>` 组合式 API |
-| 构建工具 | Vite | ^8.0.10 | 开发服务器 / 生产构建 |
-| 路由 | Vue Router | ^5.0.6 | HTML5 History 模式，单页应用路由 |
-| 3D 渲染 | Three.js | ^0.184.0 | WebGL 着色器雪花背景 |
-| 动画 | GSAP | ^3.15.0 | SplitText 文字动画 + ScrollTrigger 滚动触发 |
-| 动画 | motion-v | ^2.2.1 | Framer Motion 的 Vue 移植，文字模糊入场 |
-| 3D 数学 | gl-matrix | ^3.4.4 | 四元数、矩阵运算（WebGL 项目菜单） |
-| Markdown | marked | ^18.0.2 | Markdown 解析 |
+| 类别 | 技术 |
+|------|------|
+| 框架 | Vue 3 |
+| 构建工具 | Vite |
+| 路由 | Vue Router |
+| 3D 渲染 | Three.js |
+| 动画 | GSAP |
+| 动画 | motion-v |
+| 3D 数学 | gl-matrix |
+| Markdown | marked |
 
 ## 页面结构
 
-| 路径 | 页面 | 说明 |
-|------|------|------|
+| 路径 | 页面 |
+|------|------|
 | `/` | 首页 |
 | `/projects` | 项目列表 |
 | `/projects/:id` | 项目详情 |
