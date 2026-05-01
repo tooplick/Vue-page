@@ -1,5 +1,71 @@
-# Vue 3 + Vite
+# 个人作品集网站 — TOOPLICK
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+> 前端开发期末作业
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## 项目简介
+
+本项目是一个基于 **Vue 3 + Vite** 构建的个人作品集（Portfolio）网站，用于展示个人项目、开源贡献及常用服务入口。网站采用深色极简风格，融合了多种 Web 动画技术（WebGL、GSAP、Canvas 2D、CSS 动画等），在视觉表现和交互体验上进行了较为深入的探索。
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+| 框架 | Vue 3 | ^3.5.32 | 响应式 UI，`<script setup>` 组合式 API |
+| 构建工具 | Vite | ^8.0.10 | 开发服务器 / 生产构建 |
+| 路由 | Vue Router | ^5.0.6 | HTML5 History 模式，单页应用路由 |
+| 3D 渲染 | Three.js | ^0.184.0 | WebGL 着色器雪花背景 |
+| 动画 | GSAP | ^3.15.0 | SplitText 文字动画 + ScrollTrigger 滚动触发 |
+| 动画 | motion-v | ^2.2.1 | Framer Motion 的 Vue 移植，文字模糊入场 |
+| 3D 数学 | gl-matrix | ^3.4.4 | 四元数、矩阵运算（WebGL 项目菜单） |
+| Markdown | marked | ^18.0.2 | Markdown 解析 |
+
+## 页面结构
+
+| 路径 | 页面 | 说明 |
+|------|------|------|
+| `/` | 首页 |
+| `/projects` | 项目列表 |
+| `/projects/:id` | 项目详情 |
+| `/portal` | 服务门户 |
+| `/:pathMatch(.*)*` | 404 |
+
+```
+
+## 运行方式
+
+```bash
+# 安装依赖
+npm install
+
+# 启动开发服务器（支持 HMR 热更新）
+npm run dev
+
+# 生产构建（输出到 dist/）
+npm run build
+
+# 预览生产构建
+npm run preview
+```
+
+## 部署
+
+项目已配置 `public/_redirects` 文件，支持 SPA 单页应用部署到 Cloudflare Pages / Netlify 等静态托管平台：
+
+```
+/*    /index.html   200
+```
+
+生产构建输出到 `dist/` 目录，直接上传即可。
+
+## 总结
+
+本项目通过一个完整的个人作品集网站，实践了以下前端开发技能：
+
+1. **Vue 3 组合式 API** — `<script setup>`、响应式数据、生命周期钩子、路由守卫
+2. **单页应用路由** — Vue Router 动态路由、路由监听、滚动行为控制
+3. **WebGL / Three.js** — GLSL 着色器编写、WebGL 2 实例化渲染、3D 数学（矩阵、四元数）
+4. **Canvas 2D 动画** — requestAnimationFrame 驱动的粒子系统和像素网格动画
+5. **GSAP 动画库** — ScrollTrigger 滚动触发动画、SplitText 文字拆分动画
+6. **第三方 API 集成** — GitHub API 实时数据获取与动画联动
+7. **响应式设计与 CSS** — 滚动吸附、隐藏滚动条、全局暗色主题
+8. **组件化开发** — 14 个可复用组件，涵盖 Canvas / WebGL / CSS / JS 多种渲染方案

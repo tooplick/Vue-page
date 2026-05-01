@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router'
 import SplitText from '../components/SplitText.vue'
 import BlurText from '../components/BlurText.vue'
 import CountUp from '../components/CountUp.vue'
-import ScrollReveal from '../components/ScrollReveal.vue'
 import { projects } from '../data/projects'
 
 const route = useRoute()
@@ -86,7 +85,10 @@ watch(project, (p) => {
         </a>
       </div>
 
-      <div v-if="project.contributions?.length" class="scroll-hint">scroll</div>
+      <div v-if="project.contributions?.length" class="scroll-hint">
+        <div class="scroll-arrow">&#8595;</div>
+        <span>Scroll</span>
+      </div>
     </section>
 
     <section v-if="project.contributions?.length" class="detail-contribs">
@@ -258,9 +260,14 @@ watch(project, (p) => {
   bottom: 2rem;
   opacity: 0.3;
   font-size: 0.8rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  animation: bounce 2s ease infinite;
+  letter-spacing: 0.1em;
+  animation: bounce 2s infinite;
+  text-align: center;
+}
+
+.scroll-arrow {
+  font-size: 1.5rem;
+  margin-bottom: 0.3rem;
 }
 
 @keyframes bounce {
