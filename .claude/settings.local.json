@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:vue-bits.dev)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(npm info *)",
+      "Bash(gh search *)",
+      "Bash(gh api *)",
+      "Bash(npm run *)",
+      "Bash(gh pr *)"
+    ]
+  }
+}

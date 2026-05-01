@@ -2,14 +2,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Projects from '../views/Projects.vue'
 import ProjectDetail from '../views/ProjectDetail.vue'
-import About from '../views/About.vue'
+import Portal from '../views/Portal.vue'
 import NotFound from '../views/NotFound.vue'
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
   { path: '/projects', name: 'Projects', component: Projects },
   { path: '/projects/:id', name: 'ProjectDetail', component: ProjectDetail },
-  { path: '/about', name: 'About', component: About },
+  { path: '/portal', name: 'Portal', component: Portal },
+  { path: '/about', redirect: '/portal' },
   { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFound }
 ]
 

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import SplitText from '../components/SplitText.vue'
 import BlurText from '../components/BlurText.vue'
 import CountUp from '../components/CountUp.vue'
+import ScrollReveal from '../components/ScrollReveal.vue'
 import { projects } from '../data/projects'
 
 const route = useRoute()
@@ -38,61 +39,79 @@ watch(project, (p) => {
 
 <template>
   <div class="project-detail" v-if="project">
-    <div class="detail-header">
-      <SplitText
-        :text="project.title"
-        tag="h1"
-        :delay="80"
-        :duration="1"
-        ease="power3.out"
-        text-align="center"
-        class-name="detail-title"
-      />
-
-      <div class="detail-tags">
-        <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
-      </div>
-
-      <div class="stars-row">
-        <CountUp
-          :to="stars"
-          :duration="2"
-          :delay="0.3"
-          separator=","
-          class-name="stars-count"
+    <section class="detail-main">
+      <div class="detail-header">
+        <SplitText
+          :text="project.title"
+          tag="h1"
+          :delay="80"
+          :duration="1"
+          ease="power3.out"
+          text-align="center"
+          class-name="detail-title"
         />
-        <span class="stars-suffix">&#9733;</span>
+
+        <div class="detail-tags">
+          <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
+        </div>
+
+        <div class="stars-row">
+          <CountUp
+            :to="stars"
+            :duration="2"
+            :delay="0.3"
+            separator=","
+            class-name="stars-count"
+          />
+          <span class="stars-suffix">&#9733;</span>
+        </div>
       </div>
-    </div>
 
-    <div class="detail-body">
-      <BlurText
-        :text="project.description"
-        :delay="100"
-        animate-by="words"
-        direction="top"
-        class-name="detail-desc"
-      />
-    </div>
+      <div class="detail-body">
+        <BlurText
+          :text="project.description"
+          :delay="100"
+          animate-by="words"
+          direction="top"
+          class-name="detail-desc"
+        />
+      </div>
 
-    <div class="detail-actions">
-      <router-link to="/projects" class="btn-link btn-back">
-        &larr; All Projects
-      </router-link>
-      <a :href="project.link" target="_blank" rel="noopener" class="btn-link">
-        GitHub &rarr;
-      </a>
-    </div>
+      <div class="detail-actions">
+        <router-link to="/projects" class="btn-link btn-back">
+          All Projects
+        </router-link>
+        <a :href="project.link" target="_blank" rel="noopener" class="btn-link">
+          GitHub
+        </a>
+      </div>
+
+      <div v-if="project.contributions?.length" class="scroll-hint">scroll</div>
+    </section>
+
+    <section v-if="project.contributions?.length" class="detail-contribs">
+      <h2 class="contrib-label">My Contributions</h2>
+      <ul class="contrib-list">
+        <li v-for="c in project.contributions" :key="c.pr">
+          <a :href="c.pr" target="_blank" rel="noopener">{{ c.title }}</a>
+          <span class="contrib-desc">{{ c.description }}</span>
+        </li>
+      </ul>
+    </section>
   </div>
 
   <div v-else class="not-found">
     <h2>Project not found</h2>
-    <router-link to="/projects" class="btn-link">&larr; Back to Projects</router-link>
+    <router-link to="/projects" class="btn-link">Back to Projects</router-link>
   </div>
 </template>
 
 <style scoped>
 .project-detail {
+  min-height: 100vh;
+}
+
+.detail-main {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -100,6 +119,8 @@ watch(project, (p) => {
   justify-content: center;
   padding: 4rem 2rem;
   text-align: center;
+  position: relative;
+  scroll-snap-align: start;
 }
 
 .detail-header {
@@ -160,6 +181,58 @@ watch(project, (p) => {
   gap: 2rem;
 }
 
+.detail-contribs {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: left;
+  scroll-snap-align: start;
+}
+
+.contrib-label {
+  font-size: 0.85rem;
+  opacity: 0.4;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 400;
+  margin-bottom: 1.2rem;
+  text-align: center;
+}
+
+.contrib-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-width: 600px;
+}
+
+.contrib-list li {
+  margin-bottom: 1rem;
+}
+
+.contrib-list a {
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 0.95rem;
+  transition: opacity 0.3s;
+}
+
+.contrib-list a:hover {
+  opacity: 0.6;
+}
+
+.contrib-desc {
+  display: block;
+  opacity: 0.5;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-top: 0.2rem;
+}
+
 .btn-link {
   color: white;
   text-decoration: underline;
@@ -178,6 +251,21 @@ watch(project, (p) => {
 
 .btn-back:hover {
   opacity: 0.8;
+}
+
+.scroll-hint {
+  position: absolute;
+  bottom: 2rem;
+  opacity: 0.3;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  animation: bounce 2s ease infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
 }
 
 .not-found {

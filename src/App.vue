@@ -38,7 +38,7 @@ watch(() => route.path, async () => {
       <nav class="nav-bar">
         <router-link to="/" class="nav-link">Home</router-link>
         <router-link to="/projects" class="nav-link">Projects</router-link>
-        <router-link to="/about" class="nav-link">About</router-link>
+        <router-link to="/portal" class="nav-link">Portal</router-link>
       </nav>
 
       <div class="content">

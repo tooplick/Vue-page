@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch, useTemplateRef } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, useTemplateRef } from 'vue'
 
 const props = defineProps({
   to: { type: Number, required: true },
@@ -117,6 +117,9 @@ watch(
     currentValue.value = props.direction === 'down' ? props.to : props.from
     updateDisplay()
     hasStarted.value = false
+    if (isInView.value && props.startWhen) {
+      nextTick(() => startAnimation())
+    }
   },
   { immediate: true }
 )
