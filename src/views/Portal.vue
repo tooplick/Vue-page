@@ -1,4 +1,5 @@
 <script setup>
+import { Motion } from 'motion-v'
 import BlurText from '../components/BlurText.vue'
 import PixelCard from '../components/PixelCard.vue'
 
@@ -24,6 +25,22 @@ const portalLinks = [
     { label: 'GitHub Pages', href: 'https://tooplick.github.io/' },
   ]},
 ]
+
+const blurFrom = { filter: 'blur(10px)', opacity: 0, y: -20 }
+const blurKeyframes = {
+  filter: ['blur(10px)', 'blur(4px)', 'blur(0px)'],
+  opacity: [0, 0.4, 0.6],
+  y: [-20, 3, 0],
+}
+const labelKeyframes = {
+  filter: ['blur(10px)', 'blur(4px)', 'blur(0px)'],
+  opacity: [0, 0.2, 0.3],
+  y: [-20, 3, 0],
+}
+
+const getDelay = (gi) => {
+  return { duration: 0.5, delay: 0.4 + gi * 0.15, ease: [0.25, 0.1, 0.25, 1] }
+}
 </script>
 
 <template>
@@ -39,16 +56,31 @@ const portalLinks = [
 
       <PixelCard variant="blue" class-name="portal-card">
         <div class="card-inner">
-          <div v-for="group in portalLinks" :key="group.category" class="link-group">
-            <h2 class="section-label">{{ group.category }}</h2>
+          <div
+            v-for="(group, gi) in portalLinks"
+            :key="group.category"
+            class="link-group"
+          >
+            <Motion
+              tag="h2"
+              class="section-label"
+              :initial="blurFrom"
+              :animate="labelKeyframes"
+              :transition="{ duration: 0.5, delay: 0.3 + gi * 0.15, ease: [0.25, 0.1, 0.25, 1] }"
+            >{{ group.category }}</Motion>
             <div class="link-items">
-              <a
-                v-for="link in group.links"
+              <Motion
+                v-for="(link, li) in group.links"
+                tag="a"
                 :key="link.label"
                 :href="link.href"
                 target="_blank"
                 rel="noopener"
-              >{{ link.label }}</a>
+                class="link-item"
+                :initial="blurFrom"
+                :animate="blurKeyframes"
+                :transition="getDelay(gi)"
+              >{{ link.label }}</Motion>
             </div>
           </div>
         </div>
@@ -73,6 +105,7 @@ const portalLinks = [
 }
 
 .portal-title {
+  font-size: clamp(2rem, 5vw, 3.5rem) !important;
   margin-bottom: 3rem;
 }
 
@@ -80,6 +113,12 @@ const portalLinks = [
   width: 100%;
   max-width: 500px;
   min-height: 330px;
+  animation: fadeUp 0.6s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .card-inner {
@@ -96,7 +135,6 @@ const portalLinks = [
 
 .section-label {
   font-size: 0.85rem;
-  opacity: 0.4;
   letter-spacing: 0.15em;
   text-transform: uppercase;
   font-weight: 400;
@@ -109,16 +147,17 @@ const portalLinks = [
   gap: 0.4rem 1.2rem;
 }
 
-.link-items a {
+.link-item {
   color: white;
   text-decoration: underline;
   text-underline-offset: 4px;
   font-size: 0.95rem;
-  opacity: 0.6;
+  display: inline-block;
+  will-change: transform, filter, opacity;
   transition: opacity 0.3s;
 }
 
-.link-items a:hover {
-  opacity: 1;
+.link-item:hover {
+  opacity: 0.7 !important;
 }
 </style>

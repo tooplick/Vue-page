@@ -19,7 +19,7 @@ Personal portfolio site for "TOOPLICK" built with Vue 3 + Vite. No TypeScript �
 **App shell** (`App.vue`): Wraps everything in `<ClickSpark>` → `<PixelSnow>` (fixed WebGL background) → top-right nav → `<router-view>`. Watches route changes to call `ScrollTrigger.refresh()`.
 
 **Routes** (eagerly loaded, HTML5 history mode):
-- `/` — Home with CSS scroll-snap (4 sections, each 100vh): SplitText hero, ScrollFloat, BlurText, CTA
+- `/` — Home with CSS scroll-snap (4 sections, each 100vh): SplitText hero, BlurText, BlurText, CTA
 - `/projects` — Full-screen WebGL 2 icosahedron sphere menu (InfiniteMenu) with fade-in entrance
 - `/projects/:id` — Project detail (two screens with scroll-snap): first screen has SplitText title, CountUp stars, BlurText description; second screen has contributions list (if any)
 - `/portal` — Portal links in a PixelCard with pixel hover animation (blue variant)
@@ -41,7 +41,7 @@ Personal portfolio site for "TOOPLICK" built with Vue 3 + Vite. No TypeScript �
 | Library | Components | Notes |
 |---------|-----------|-------|
 | **Three.js** | `PixelSnow.vue` | GLSL shader snowfall, fixed background, pointer-events none |
-| **GSAP + ScrollTrigger** | `SplitText`, `ScrollFloat`, `ScrollReveal` | Use `gsap.context()` for cleanup, `once: true`, scroller is window |
+| **GSAP + ScrollTrigger** | `SplitText`, `ScrollReveal` | Use `gsap.context()` for cleanup, `once: true`, scroller is window |
 | **motion-v** | `BlurText.vue` | Vue port of Framer Motion, triggers on IntersectionObserver |
 | **gl-matrix** | `InfiniteMenu.vue` | WebGL 2 instanced rendering, ArcballControl, texture atlasing |
 | **Pure JS/CSS** | `ClickSpark`, `ScrambleText`, `CountUp`, `LogoLoop`, `GlitchText`, `PixelCard` | Canvas 2D, requestAnimationFrame, CSS keyframes |

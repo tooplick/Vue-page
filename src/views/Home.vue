@@ -1,6 +1,5 @@
 <script setup>
 import SplitText from '../components/SplitText.vue'
-import ScrollFloat from '../components/ScrollFloat.vue'
 import BlurText from '../components/BlurText.vue'
 </script>
 
@@ -32,15 +31,14 @@ import BlurText from '../components/BlurText.vue'
       </div>
     </section>
 
-    <!-- ScrollFloat -->
+    <!-- BlurText -->
     <section class="section">
-      <ScrollFloat
-        children="Building the Future"
-        container-class-name="float-wrap"
-        text-class-name="float-text"
-        :animation-duration="1.2"
-        ease="back.inOut(2)"
-        :stagger="0.04"
+      <BlurText
+        text="Building the Future"
+        :delay="100"
+        animate-by="words"
+        direction="top"
+        class-name="float-text"
       />
     </section>
 
@@ -100,6 +98,7 @@ import BlurText from '../components/BlurText.vue'
 }
 
 .hero-title {
+  font-size: clamp(3rem, 8vw, 6rem) !important;
   margin-bottom: 1rem;
 }
 
@@ -131,9 +130,8 @@ import BlurText from '../components/BlurText.vue'
 }
 
 /* Float */
-.float-wrap { text-align: center; }
 .float-text {
-  font-size: clamp(1.2rem, 4vw, 2.5rem) !important;
+  font-size: clamp(3rem, 8vw, 6rem) !important;
   font-weight: 600 !important;
   opacity: 0.8;
 }
@@ -141,7 +139,7 @@ import BlurText from '../components/BlurText.vue'
 /* BlurText reveal */
 .reveal-wrap { max-width: 650px; text-align: center; }
 .reveal-text {
-  font-size: clamp(1rem, 2.5vw, 1.3rem) !important;
+  font-size: clamp(1.5rem, 3.5vw, 2rem) !important;
   font-weight: 400 !important;
   opacity: 0.6;
   line-height: 2;
