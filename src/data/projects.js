@@ -1,14 +1,5 @@
 export const projects = [
   {
-    id: 'qq-music-api',
-    title: 'Music API',
-    description: '基于 Cloudflare Workers + D1 数据库的 QQ 音乐 API 服务，提供音乐数据、播放列表和搜索功能的编程接口。',
-    image: '/projects/qq-music-api.png',
-    link: 'https://github.com/tooplick/qq-music-api',
-    stars: 0,
-    tags: ['Cloudflare Workers', 'D1', 'API']
-  },
-  {
     id: 'astrbot',
     title: 'AstrBot',
     description: '开源全能 Agent 聊天机器人平台，集成 QQ、微信、飞书、钉钉、Telegram 等主流即时通讯应用，支持多模态、Agent、MCP、知识库，拥有 1000+ 插件生态。',
@@ -23,6 +14,15 @@ export const projects = [
         description: 'Added per-provider proxy configuration and detailed connection failure logs for OpenAI, Anthropic, Gemini, and multiple TTS providers.'
       }
     ]
+  },
+    {
+    id: 'qq-music-api',
+    title: 'Music API',
+    description: '基于 Cloudflare Workers + D1 数据库的 QQ 音乐 API 服务，提供音乐数据、播放列表和搜索功能的编程接口。',
+    image: '/projects/qq-music-api.png',
+    link: 'https://github.com/tooplick/qq-music-api',
+    stars: 0,
+    tags: ['Cloudflare Workers', 'D1', 'API']
   },
   {
     id: 'nekro-agent',
